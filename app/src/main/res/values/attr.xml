@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--命名-->
+<!--组件_标识_控件_属性-->
+<!--dimens-->
+<!--例如 登录按钮的宽 login_btn_width-->
+<!--colors-->
+<!--例如 登录按钮的背景颜色 login_btn_backgroup-->
+<!--strings-->
+<!--例如 登录按钮上的文字 login_btn_text-->
+<!--styles 用驼峰代替_ -->
+<!--例如 登录按钮的样式 LoginBtnStyle-->
+
+<resources>
+    <declare-styleable name="ENDownloadView">
+        <attr name="line_color" format="color"/>
+        <attr name="bg_line_color" format="color"/>
+        <attr name="text_color" format="color"/>
+        <attr name="line_width" format="integer"/>
+        <attr name="bg_line_width" format="integer"/>
+        <attr name="text_size" format="integer"/>
+    </declare-styleable>
+
+    <declare-styleable name="ENPlayView">
+        <attr name="play_line_color" format="color"/>
+        <attr name="play_bg_line_color" format="color"/>
+        <attr name="play_line_width" format="integer"/>
+        <attr name="play_bg_line_width" format="integer"/>
+    </declare-styleable>
+</resources>
