@@ -21,6 +21,7 @@ import android.annotation.TargetApi;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.media.AudioManager;
@@ -124,6 +125,7 @@ public class IjkVideoView extends FrameLayout implements IVideoView, IPlayerCont
     }
 
     private void initVideoView(Context context) {
+        setBackgroundColor(Color.BLACK);
         mAppContext = context.getApplicationContext();
         mVideoWidth = 0;
         mVideoHeight = 0;
@@ -133,8 +135,6 @@ public class IjkVideoView extends FrameLayout implements IVideoView, IPlayerCont
         mCurrentState = STATE_IDLE;
         notifyStateChange();
         mTargetState = STATE_IDLE;
-        //bind manager
-        IjkVideoManager.getInstance().setIVideoView(this);
     }
 
     /**
@@ -170,7 +170,7 @@ public class IjkVideoView extends FrameLayout implements IVideoView, IPlayerCont
             mMediaPlayer.start();
             mCurrentState = STATE_PLAYING;
             notifyStateChange();
-        }else {
+        } else {
             openVideo();
             requestLayout();
             invalidate();
@@ -294,20 +294,23 @@ public class IjkVideoView extends FrameLayout implements IVideoView, IPlayerCont
         mSeekWhenPrepared = 0;
         mCurrentBufferPercentage = 0;
         mVideoRotationDegree = 0;
-        release(false);
     }
 
     @TargetApi(Build.VERSION_CODES.M)
     private void openVideo() {
-        // we shouldn't clear the target state, because somebody might have
-        // called start() previously
-        release(false);
+        //调用 IjkVideoManager.setVideoUri 方法，会 release ijkplayer，所以这里我们只释放 ijkview 本身的资源
+        onReleasePlayer();
+
         AudioManager am = (AudioManager) mAppContext.getSystemService(Context.AUDIO_SERVICE);
         am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
 
         if (mSettings == null) {
             mSettings = new Settings(mAppContext);
         }
+
+        //对列表的兼容
+        IjkVideoManager.getInstance().setVideoView(this);
+
         IjkVideoManager.getInstance().setVideoUri(mUri, mSettings);
         mCurrentBufferPercentage = 0;
     }
@@ -338,6 +341,10 @@ public class IjkVideoView extends FrameLayout implements IVideoView, IPlayerCont
         notifyStateChange();
         AudioManager am = (AudioManager) mAppContext.getSystemService(Context.AUDIO_SERVICE);
         am.abandonAudioFocus(null);
+        releaseRender();
+        if (mMediaController != null){
+            mMediaController.setEnabled(false);
+        }
     }
 
     @Override
@@ -532,6 +539,13 @@ public class IjkVideoView extends FrameLayout implements IVideoView, IPlayerCont
         setRender(mCurrentRender);
     }
 
+    /** render 需要释放的资源 */
+    private void releaseRender() {
+        if (IjkVideoManager.getInstance().getMediaPlayer() != null) {
+            IjkVideoManager.getInstance().getMediaPlayer().setDisplay(null);
+        }
+    }
+
     private void setRender(int render) {
         switch (render) {
             case RENDER_NONE:
@@ -563,9 +577,7 @@ public class IjkVideoView extends FrameLayout implements IVideoView, IPlayerCont
     private void setRenderView(IRenderView renderView) {
         if (mRenderView != null) {
 
-            if (IjkVideoManager.getInstance().getMediaPlayer() != null) {
-                IjkVideoManager.getInstance().getMediaPlayer().setDisplay(null);
-            }
+            releaseRender();
 
             View renderUIView = mRenderView.getView();
             mRenderView.removeRenderCallback(mSHCallback);
@@ -592,7 +604,7 @@ public class IjkVideoView extends FrameLayout implements IVideoView, IPlayerCont
                 LayoutParams.WRAP_CONTENT,
                 Gravity.CENTER);
         renderUIView.setLayoutParams(lp);
-        addView(renderUIView,0);
+        addView(renderUIView, 0);
 
         mRenderView.addRenderCallback(mSHCallback);
         mRenderView.setVideoRotation(mVideoRotationDegree);
@@ -620,6 +632,7 @@ public class IjkVideoView extends FrameLayout implements IVideoView, IPlayerCont
 
         @Override
         public void onSurfaceCreated(@NonNull IRenderView.ISurfaceHolder holder, int width, int height) {
+            // TODO: 2017/8/15 列表中 surface 重新创建后，不能重新渲染
             if (holder.getRenderView() != mRenderView) {
                 debug("onSurfaceCreated: unmatched render callback\n");
                 return;
@@ -638,17 +651,9 @@ public class IjkVideoView extends FrameLayout implements IVideoView, IPlayerCont
             }
             mSurfaceHolder = null;
 
-            releaseWithoutStop();
+            releaseRender();
         }
-
     };
-
-    public void releaseWithoutStop() {
-        IMediaPlayer mediaPlayer = IjkVideoManager.getInstance().getMediaPlayer();
-        if (mediaPlayer != null) {
-            mediaPlayer.setDisplay(null);
-        }
-    }
 
     private void bindSurfaceHolder(IMediaPlayer mp, IRenderView.ISurfaceHolder holder) {
         if (mp == null) {

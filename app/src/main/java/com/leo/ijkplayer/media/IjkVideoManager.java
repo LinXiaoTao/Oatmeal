@@ -45,7 +45,8 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     /** 当前播放的 Uri */
     private Uri mUri;
     /** video view */
-    private WeakReference<IVideoView> mIVideoView;
+    /** 因为 manager 是单例，所以在列表中使用时，要注意 videoview 的更新 */
+    private WeakReference<IVideoView> mVideoView;
     /** ijk so loader */
     private static IjkLibLoader sIjkLibLoader;
     /** 当前是否为静音 */
@@ -126,11 +127,17 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
         sIjkLibLoader = ijkLibLoader;
     }
 
-    public IjkVideoManager setIVideoView(@Nullable IVideoView videoView) {
+    public IjkVideoManager setVideoView(@Nullable IVideoView videoView) {
+        IVideoView oldVideoView = videoView();
+        if (oldVideoView != null){
+            //这里我们暂先让旧的 videoview，先走 release 回调
+            oldVideoView.onReleasePlayer();
+        }
+
         if (videoView == null) {
-            mIVideoView = null;
+            mVideoView = null;
         } else {
-            mIVideoView = new WeakReference<>(videoView);
+            mVideoView = new WeakReference<>(videoView);
         }
         return this;
     }
@@ -338,7 +345,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     private void initPlayer(Settings settings) {
 
         try {
-            releasePlayer();
+            releasePlayer(false);
 
             mMediaPlayer = createPlayer(settings);
             setMute(mMute);
@@ -391,13 +398,13 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
 
     /** 释放视频管理器 */
     private void releaseVideoManager() {
-        releasePlayer();
+        releasePlayer(true);
         setMute(false);
         cancelTimeOutRunnable();
     }
 
     /** 释放播放器 */
-    private void releasePlayer() {
+    private void releasePlayer(boolean notify) {
         if (mMediaPlayer != null) {
             mMediaPlayer.reset();
             mMediaPlayer.release();
@@ -405,7 +412,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
         }
 
         IVideoView iVideoView = videoView();
-        if (iVideoView != null) {
+        if (iVideoView != null && notify) {
             iVideoView.onReleasePlayer();
         }
     }
@@ -496,8 +503,8 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     }
 
     private IVideoView videoView() {
-        if (mIVideoView != null) {
-            return mIVideoView.get();
+        if (mVideoView != null) {
+            return mVideoView.get();
         }
         return null;
     }

@@ -13,7 +13,14 @@
         android:theme="@style/AppTheme">
         <activity
             android:name=".MainActivity"
-            android:configChanges="orientation|keyboardHidden|screenSize">
+            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:label="单个播放器"/>
+
+        <activity
+            android:name=".ListActivity"
+            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:label="列表播放器"
+            >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
 

@@ -59,6 +59,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private static final int HIDE_LAYOUT = 2;
     /** 显示布局 */
     private static final int SHOW_LAYOUT = 3;
+    /** 重置布局 */
+    private static final int RESET_LAYOUT = 4;
     /** 默认显示超时时间 */
     private static final int DEFALUT_TIMEOUT = 3 * 1000;
 
@@ -217,12 +219,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
 
         if (!mShowing) {
-            mMainHandler.post(new Runnable() {
-                @Override
-                public void run() {
-                    setProgress();
-                }
-            });
+            setProgress();
             mShowing = true;
         }
 
@@ -248,6 +245,10 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
         switch (state) {
             case IjkVideoView.STATE_IDLE://闲置中
+                mShowPlay = true;
+                hide();
+                mMainHandler.removeMessages(SHOW_PROGRESS);
+                mMainHandler.sendEmptyMessage(RESET_LAYOUT);
                 break;
             case IjkVideoView.STATE_PREPARING://准备中
                 break;
@@ -314,9 +315,35 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 case HIDE_LAYOUT:
                     hideLayout();
                     break;
+                case RESET_LAYOUT:
+                    resetLayout();
+                    break;
             }
         }
     };
+
+    /** 复位布局 */
+    private void resetLayout() {
+        if (mBottomProgressbar != null) {
+            mBottomProgressbar.setProgress(0);
+            mBottomProgressbar.setSecondaryProgress(0);
+        }
+        if (mSeekProgress != null){
+            mSeekProgress.setProgress(0);
+            mSeekProgress.setSecondaryProgress(0);
+        }
+        if (mBtnPlay != null) {
+            updatePausePlay();
+        }
+
+        if (mLoadingView != null) {
+            mLoadingView.reset();
+        }
+
+        if (mTextCurrent != null) {
+            mTextCurrent.setText(stringForTime(0));
+        }
+    }
 
     /** 显示布局 */
     private void showLayout() {
@@ -422,12 +449,12 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         @Override
         public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
 
-            if (!mEnabled) {
-                showInfo(NOT_READY_INFO);
+            if (!fromUser || mPlayerControl == null || mSeekProgress == null) {
                 return;
             }
 
-            if (!fromUser || mPlayerControl == null || mSeekProgress == null) {
+            if (!mEnabled) {
+                showInfo(NOT_READY_INFO);
                 return;
             }
 
@@ -440,11 +467,6 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
         @Override
         public void onStartTrackingTouch(SeekBar seekBar) {
-
-            if (!mEnabled) {
-                showInfo(NOT_READY_INFO);
-                return;
-            }
 
             show(3600000);
 
