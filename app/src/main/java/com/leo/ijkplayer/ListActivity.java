@@ -60,7 +60,6 @@ public class ListActivity extends AppCompatActivity {
                     int position = IjkVideoManager.getInstance().getPlayPosition();
                     if (!isVisible(position)) {
                         IjkVideoManager.getInstance().release();
-                        mRecyclerView.getAdapter().notifyItemChanged(position);
                     }
                 }
             }
@@ -112,6 +111,7 @@ public class ListActivity extends AppCompatActivity {
             View contentView = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_video, parent, false);
             ViewHolder viewHolder = new ViewHolder(contentView);
             viewHolder.controller = new MediaController(parent.getContext());
+            viewHolder.controller.setThumbRes(R.drawable.xxx2);
             viewHolder.video.setMediaController(viewHolder.controller);
             return viewHolder;
         }
@@ -120,6 +120,7 @@ public class ListActivity extends AppCompatActivity {
         public void onBindViewHolder(ViewHolder holder, int position) {
             holder.video.setVideoPath(VIDEO_URL);
             holder.video.setPlayPosition(position);
+            holder.controller.setPlayPosition(position);
         }
 
         @Override

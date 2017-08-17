@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.support.annotation.DrawableRes;
 import android.support.annotation.NonNull;
 import android.util.AttributeSet;
 import android.util.Log;
@@ -50,8 +51,14 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     ///////////////////////////////////////////////////////////////////////////
     /** 是否显示底部进度条 */
     private boolean mShowBottomProgress = true;
+    /** 是否显示封面图 */
+    private boolean mShowThumb = true;
+    @DrawableRes
+    private int mThumbRes;
     /** 兼容列表播放，记录当前播放序号 */
     private int mPlayPosition = -1;
+    /** 是否启用屏幕感应 */
+    private boolean mEnableOrientation = true;
 
     ///////////////////////////////////////////////////////////////////////////
     // 常量区
@@ -66,6 +73,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private static final int SHOW_LAYOUT = 3;
     /** 重置布局 */
     private static final int RESET_LAYOUT = 4;
+    /** 显示封面图 */
+    private static final int UPDATE_THUMB = 5;
     /** 默认显示超时时间 */
     private static final int DEFALUT_TIMEOUT = 3 * 1000;
 
@@ -80,6 +89,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private TextView mTextTotal;
     private ImageView mBtnFullscreen;
     private ProgressBar mBottomProgressbar;
+    private ImageView mImgThumb;
 
     ///////////////////////////////////////////////////////////////////////////
     // 内部变量
@@ -129,6 +139,31 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         mFullscreen = fullscreen;
         if (mBtnFullscreen != null) {
             mBtnFullscreen.setImageResource(mFullscreen ? R.drawable.video_shrink : R.drawable.video_enlarge);
+        }
+        return this;
+    }
+
+    public MediaController setShowBottomProgress(boolean showBottomProgress) {
+        mShowBottomProgress = showBottomProgress;
+        return this;
+    }
+
+    public MediaController setShowThumb(boolean showThumb) {
+        mShowThumb = showThumb;
+        mMainHandler.sendEmptyMessage(UPDATE_THUMB);
+        return this;
+    }
+
+    public MediaController setThumbRes(int thumbRes) {
+        mThumbRes = thumbRes;
+        mMainHandler.sendEmptyMessage(UPDATE_THUMB);
+        return this;
+    }
+
+    public MediaController setEnableOrientation(boolean enableOrientation) {
+        mEnableOrientation = enableOrientation;
+        if (mOrientationUtils != null) {
+            mOrientationUtils.setEnable(mEnableOrientation);
         }
         return this;
     }
@@ -260,6 +295,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 hide();
                 mMainHandler.removeMessages(SHOW_PROGRESS);
                 mMainHandler.sendEmptyMessage(RESET_LAYOUT);
+                mMainHandler.sendEmptyMessage(UPDATE_THUMB);
                 break;
             case IjkVideoManager.STATE_PREPARING://准备中
                 break;
@@ -269,6 +305,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 mShowPlay = false;
                 mBtnPlay.play();
                 show();
+                mMainHandler.sendEmptyMessage(UPDATE_THUMB);
                 break;
             case IjkVideoManager.STATE_PAUSED://暂停中
                 mOldPlayPosition = IjkVideoManager.getInstance().getCurrentPosition();
@@ -286,6 +323,10 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
     @Override
     public void screenOrientationChangle(int screenOrientation) {
+        if (!isActive()) {
+            return;
+        }
+
         switch (screenOrientation) {
             case ActivityInfo.SCREEN_ORIENTATION_PORTRAIT://竖屏
                 mBtnFullscreen.setImageResource(R.drawable.video_enlarge);
@@ -302,6 +343,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
         mOrientationUtils = new OrientationUtils(Activity.class.cast(getContext()));
         mOrientationUtils.setCallback(this);
+        mOrientationUtils.setEnable(mEnableOrientation);
 
         setBackgroundColor(Color.TRANSPARENT);
         setClickable(true);
@@ -332,6 +374,9 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                     break;
                 case RESET_LAYOUT:
                     resetLayout();
+                    break;
+                case UPDATE_THUMB:
+                    updateThumb();
                     break;
             }
         }
@@ -524,6 +569,11 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         mBtnFullscreen = (ImageView) mediaView.findViewById(R.id.fullscreen);
         mBottomProgressbar = (ProgressBar) mediaView.findViewById(R.id.bottom_progressbar);
         mBottomProgressbar.setVisibility(mShowBottomProgress ? VISIBLE : GONE);
+        mImgThumb = (ImageView) mediaView.findViewById(R.id.thumb);
+        mImgThumb.setVisibility(mShowThumb ? VISIBLE : GONE);
+        if (mShowThumb && mThumbRes > 0) {
+            mImgThumb.setImageResource(mThumbRes);
+        }
 
         mBtnFullscreen.setOnClickListener(new OnClickListener() {
             @Override
@@ -554,6 +604,24 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
         mSeekProgress.setOnSeekBarChangeListener(mOnSeekBarChangeListener);
 
+    }
+
+    /** 更新封面图 */
+    private void updateThumb() {
+        if (mImgThumb != null) {
+
+            boolean needShow = !isActive() && mShowThumb;
+            mImgThumb.setVisibility(needShow ? VISIBLE : GONE);
+            if (needShow && mThumbRes > 0) {
+                mImgThumb.setImageResource(mThumbRes);
+            }
+
+        }
+    }
+
+    /** 是否为活动的 */
+    private boolean isActive() {
+        return mPlayPosition == IjkVideoManager.getInstance().getPlayPosition();
     }
 
     private Toast mToast;
