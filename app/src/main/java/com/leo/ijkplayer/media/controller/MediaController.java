@@ -624,7 +624,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private void updateThumb() {
         if (mImgThumb != null) {
 
-            boolean needShow = !isActive() && mShowThumb;
+            boolean needShow = !isActive() && mShowThumb && !mShowLoading;
             mImgThumb.setVisibility(needShow ? VISIBLE : GONE);
             if (needShow && mThumbRes > 0) {
                 mImgThumb.setImageResource(mThumbRes);
@@ -636,15 +636,16 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     /** 处理 loading */
     private void handleLoading() {
         if (mLoadingView != null) {
-            mLoadingView.setVisibility(mShowLoading ? VISIBLE : GONE);
             if (mShowLoading) {
-                mLoadingView.start();
-                hideLayout();
-                mBtnPlay.setVisibility(GONE);
                 if (mImgThumb != null) {
                     mImgThumb.setVisibility(GONE);
                 }
+                mLoadingView.setVisibility(VISIBLE);
+                mLoadingView.start();
+                hideLayout();
+                mBtnPlay.setVisibility(GONE);
             } else {
+                mLoadingView.setVisibility(GONE);
                 mLoadingView.reset();
                 showLayout();
             }
