@@ -822,8 +822,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 }
                 mLoadingView.setVisibility(VISIBLE);
                 mLoadingView.start();
+                mShowPlay = false;
                 hideLayout();
-                mBtnPlay.setVisibility(GONE);
             } else {
                 mLoadingView.setVisibility(GONE);
                 mLoadingView.reset();
