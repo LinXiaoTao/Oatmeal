@@ -25,7 +25,6 @@ import android.widget.Toast;
 
 import com.leo.ijkplayer.R;
 import com.leo.ijkplayer.media.IjkVideoManager;
-import com.leo.ijkplayer.media.StateChangeListener;
 import com.leo.ijkplayer.media.util.OrientationUtils;
 import com.leo.ijkplayer.media.videoview.IVideoView;
 import com.leo.ijkplayer.media.weiget.ENDownloadView;
@@ -40,8 +39,7 @@ import java.util.Locale;
  * leo linxiaotao1993@vip.qq.com
  */
 
-public class MediaController extends FrameLayout implements IMediaController, OrientationUtils.Callback
-        , StateChangeListener {
+public class MediaController extends FrameLayout implements IMediaController, OrientationUtils.Callback {
 
     private static final String TAG = "MediaController";
 
@@ -75,6 +73,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private static final int RESET_LAYOUT = 4;
     /** 显示封面图 */
     private static final int UPDATE_THUMB = 5;
+    /** 显示／结束 Loading */
+    private static final int HANDLE_LOADING = 6;
     /** 默认显示超时时间 */
     private static final int DEFALUT_TIMEOUT = 3 * 1000;
 
@@ -108,6 +108,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private boolean mEnabled;
     /** 是否显示 */
     private boolean mShowing;
+    /** 显示 loading */
+    private boolean mShowLoading;
 
 
     private static final String NOT_READY_INFO = "视频还没准备好呢";
@@ -288,6 +290,16 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     @Override
     public void notifyPlayState(int state) {
 
+        boolean oldLoading = mShowLoading;
+        if (state == IjkVideoManager.STATE_PREPARING || state == IjkVideoManager.STATE_BUFFERING_START) {
+            mShowLoading = true;
+        } else {
+            mShowLoading = false;
+        }
+        if (oldLoading != mShowLoading){
+            mMainHandler.sendEmptyMessage(HANDLE_LOADING);
+        }
+
         switch (state) {
             case IjkVideoManager.STATE_IDLE://闲置中
                 mEnabled = false;
@@ -298,6 +310,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 mMainHandler.sendEmptyMessage(UPDATE_THUMB);
                 break;
             case IjkVideoManager.STATE_PREPARING://准备中
+                mMainHandler.sendEmptyMessage(UPDATE_THUMB);
                 break;
             case IjkVideoManager.STATE_PREPARED://准备好
                 break;
@@ -317,6 +330,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 show(0);
                 mMainHandler.removeMessages(SHOW_PROGRESS);
                 mBtnPlay.pause();
+                break;
+            case IjkVideoManager.STATE_BUFFERING_START://开始缓冲
                 break;
         }
     }
@@ -378,6 +393,9 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 case UPDATE_THUMB:
                     updateThumb();
                     break;
+                case HANDLE_LOADING:
+                    handleLoading();
+                    break;
             }
         }
     };
@@ -423,10 +441,6 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private void hideLayout() {
         if (mLayoutBottom != null) {
             mLayoutBottom.setVisibility(GONE);
-        }
-
-        if (mLoadingView != null) {
-            mLoadingView.setVisibility(GONE);
         }
 
         if (mBtnPlay != null) {
@@ -616,6 +630,24 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 mImgThumb.setImageResource(mThumbRes);
             }
 
+        }
+    }
+
+    /** 处理 loading */
+    private void handleLoading() {
+        if (mLoadingView != null) {
+            mLoadingView.setVisibility(mShowLoading ? VISIBLE : GONE);
+            if (mShowLoading) {
+                mLoadingView.start();
+                hideLayout();
+                mBtnPlay.setVisibility(GONE);
+                if (mImgThumb != null) {
+                    mImgThumb.setVisibility(GONE);
+                }
+            } else {
+                mLoadingView.reset();
+                showLayout();
+            }
         }
     }
 

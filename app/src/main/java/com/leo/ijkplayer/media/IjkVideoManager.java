@@ -90,6 +90,8 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     public static final int STATE_PAUSED = 4;
     /** 播放完成 */
     public static final int STATE_PLAYBACK_COMPLETED = 5;
+    /** 开始缓冲 */
+    public static final int STATE_BUFFERING_START = 6;
 
     ///////////////////////////////////////////////////////////////////////////
     // 内部使用变量
@@ -407,19 +409,29 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     @Override
     public boolean onInfo(final IMediaPlayer mp, final int what, final int extra) {
         debugLog("onInfo");
+
+        if (mNeedTimeOut) {
+            if (what == MediaPlayer.MEDIA_INFO_BUFFERING_START) {
+                //开始缓冲
+                if (isInPlaybackState()) {
+                    mTargetState = mCurrentState;
+                    mCurrentState = STATE_BUFFERING_START;
+                    notifyStateChange();
+                }
+                startTimeOutRunnable();
+            } else if (what == MediaPlayer.MEDIA_INFO_BUFFERING_END) {
+                //缓冲结束
+                cancelTimeOutRunnable();
+                if (isInPlaybackState()) {
+                    mCurrentState = mTargetState;
+                    notifyStateChange();
+                }
+            }
+        }
+
         mMainThreadHandler.post(new Runnable() {
             @Override
             public void run() {
-                if (mNeedTimeOut) {
-                    if (what == MediaPlayer.MEDIA_INFO_BUFFERING_START) {
-                        //开始缓冲
-                        startTimeOutRunnable();
-                    } else if (what == MediaPlayer.MEDIA_INFO_BUFFERING_END) {
-                        //缓冲结束
-                        cancelTimeOutRunnable();
-                    }
-                }
-
                 IVideoView iVideoView = getVideoView();
                 if (iVideoView != null) {
                     iVideoView.onInfo(mp, what, extra);

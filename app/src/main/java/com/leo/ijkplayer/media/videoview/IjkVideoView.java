@@ -183,6 +183,9 @@ public class IjkVideoView extends FrameLayout implements IVideoView {
 
         //对列表的兼容
         IjkVideoManager.getInstance().setVideoView(this);
+        if (mMediaController != null) {
+            IjkVideoManager.getInstance().setStateChangeListener(mMediaController);
+        }
 
         IjkVideoManager.getInstance().setVideoUri(mUri, mSettings);
     }

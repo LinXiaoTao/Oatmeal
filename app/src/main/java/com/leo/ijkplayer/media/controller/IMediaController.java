@@ -2,6 +2,7 @@ package com.leo.ijkplayer.media.controller;
 
 import android.view.View;
 
+import com.leo.ijkplayer.media.StateChangeListener;
 import com.leo.ijkplayer.media.videoview.IVideoView;
 
 /**
@@ -9,7 +10,7 @@ import com.leo.ijkplayer.media.videoview.IVideoView;
  * leo linxiaotao1993@vip.qq.com
  */
 
-public interface IMediaController {
+public interface IMediaController extends StateChangeListener {
 
     View makeControllerView();
 
