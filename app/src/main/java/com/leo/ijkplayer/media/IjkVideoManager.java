@@ -52,6 +52,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
      */
     private WeakReference<IVideoView> mVideoView;
     private WeakReference<StateChangeListener> mStateChangeListener;
+
     /** ijk so loader */
     private static IjkLibLoader sIjkLibLoader;
     /** 当前是否为静音 */
@@ -245,6 +246,17 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     public static void setIjkLibLoader(IjkLibLoader ijkLibLoader) {
         sIjkLibLoader = ijkLibLoader;
     }
+
+    public IjkVideoManager clearVideoView() {
+        mVideoView = null;
+        return this;
+    }
+
+    public IjkVideoManager clearStateChangeListener() {
+        mStateChangeListener = null;
+        return this;
+    }
+
 
     public IjkVideoManager setVideoView(@Nullable IVideoView videoView) {
         IVideoView oldVideoView = getVideoView();
@@ -469,6 +481,27 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
         });
     }
 
+    public void refreshRenderView(){
+        if (mMediaPlayer != null){
+            mMainThreadHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    IVideoView videoView = getVideoView();
+                    if (videoView != null) {
+                        videoView.onCreatePlayer(mMediaPlayer);
+                        videoView.onPrepared(mMediaPlayer);
+                    }
+                }
+            });
+        }
+    }
+
+    private void notifyStateChange() {
+        StateChangeListener stateChangeListener = getStateChangeListener();
+        if (stateChangeListener != null) {
+            stateChangeListener.notifyPlayState(mCurrentState);
+        }
+    }
 
     private class MediaHandler extends Handler {
 
@@ -568,12 +601,6 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
 
     }
 
-    private void notifyStateChange() {
-        StateChangeListener stateChangeListener = getStateChangeListener();
-        if (stateChangeListener != null) {
-            stateChangeListener.notifyPlayState(mCurrentState);
-        }
-    }
 
     /** 释放视频管理器 */
     private void releaseVideoManager() {

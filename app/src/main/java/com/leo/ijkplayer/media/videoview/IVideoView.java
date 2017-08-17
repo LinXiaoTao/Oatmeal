@@ -1,5 +1,9 @@
 package com.leo.ijkplayer.media.videoview;
 
+import android.graphics.Bitmap;
+
+import com.leo.ijkplayer.media.Settings;
+
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkTimedText;
 
@@ -10,7 +14,15 @@ import tv.danmaku.ijk.media.player.IjkTimedText;
 
 public interface IVideoView {
 
+    Bitmap getPauseBitmap();
+
+    void setPauseBitmap(Bitmap pauseBitmap);
+
     void openVideo();
+
+    void setSettings(Settings settings);
+
+    Settings getSettings();
 
     void onCreatePlayer(IMediaPlayer mp);
 

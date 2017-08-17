@@ -73,6 +73,8 @@ public final class OrientationUtils {
 
     private void init() {
 
+        mScreenOrientation = mContent.getResources().getConfiguration().orientation;
+
         mOrientationEventListener = new OrientationEventListener(mContent) {
             @Override
             public void onOrientationChanged(int orientation) {

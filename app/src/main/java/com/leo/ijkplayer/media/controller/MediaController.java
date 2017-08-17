@@ -3,18 +3,24 @@ package com.leo.ijkplayer.media.controller;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.support.annotation.DrawableRes;
 import android.support.annotation.NonNull;
+import android.support.v7.app.ActionBar;
+import android.support.v7.app.AppCompatActivity;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -27,6 +33,7 @@ import com.leo.ijkplayer.R;
 import com.leo.ijkplayer.media.IjkVideoManager;
 import com.leo.ijkplayer.media.util.OrientationUtils;
 import com.leo.ijkplayer.media.videoview.IVideoView;
+import com.leo.ijkplayer.media.videoview.IjkVideoView;
 import com.leo.ijkplayer.media.weiget.ENDownloadView;
 import com.leo.ijkplayer.media.weiget.ENPlayView;
 
@@ -57,6 +64,12 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private int mPlayPosition = -1;
     /** 是否启用屏幕感应 */
     private boolean mEnableOrientation = true;
+    /** 播放器点击事件 */
+    private OnTouchListener mOnTouchListener;
+    private int mFullScreenMode = FULLSCREEN_ORIENTATION;
+    /** 是否自动开始播放 */
+    private boolean mAutoStartPlay;
+    private OnFullScreenChangeListener mFullScreenChangeListener;
 
     ///////////////////////////////////////////////////////////////////////////
     // 常量区
@@ -75,6 +88,12 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private static final int UPDATE_THUMB = 5;
     /** 显示／结束 Loading */
     private static final int HANDLE_LOADING = 6;
+
+    /** 通过旋转屏幕来全屏 */
+    public static final int FULLSCREEN_ORIENTATION = 0;
+    /** 通过新增视图来全屏 */
+    public static final int FULLSCREEN_VIEW = 1;
+
     /** 默认显示超时时间 */
     private static final int DEFALUT_TIMEOUT = 3 * 1000;
 
@@ -96,6 +115,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     ///////////////////////////////////////////////////////////////////////////
     private OrientationUtils mOrientationUtils;
     private IVideoView mVideoView;
+    private Activity mContext;
     /** 记录暂停时的播放进度 */
     private int mOldPlayPosition;
     /** 当前是否为全屏显示 */
@@ -110,6 +130,12 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private boolean mShowing;
     /** 显示 loading */
     private boolean mShowLoading;
+    /** 用于恢复全屏时使用 */
+    private int mSystemUiVisibility = -1;
+    /** 全屏显示的控件 */
+    private View mFullScreenView;
+    /** 是否延迟启动 */
+    private boolean mDelayStart;
 
 
     private static final String NOT_READY_INFO = "视频还没准备好呢";
@@ -125,7 +151,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
     public MediaController(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
-        init();
+        init(context);
     }
 
     public int getPlayPosition() {
@@ -137,13 +163,6 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         return this;
     }
 
-    public MediaController setFullscreen(boolean fullscreen) {
-        mFullscreen = fullscreen;
-        if (mBtnFullscreen != null) {
-            mBtnFullscreen.setImageResource(mFullscreen ? R.drawable.video_shrink : R.drawable.video_enlarge);
-        }
-        return this;
-    }
 
     public MediaController setShowBottomProgress(boolean showBottomProgress) {
         mShowBottomProgress = showBottomProgress;
@@ -168,6 +187,34 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             mOrientationUtils.setEnable(mEnableOrientation);
         }
         return this;
+    }
+
+    public MediaController setFullScreenMode(int fullScreenMode) {
+        mFullScreenMode = fullScreenMode;
+        return this;
+    }
+
+    public MediaController setAutoStartPlay(boolean autoStartPlay) {
+        mAutoStartPlay = autoStartPlay;
+        handleAutoPlay();
+        return this;
+    }
+
+    public MediaController setFullScreenChangeListener(OnFullScreenChangeListener fullScreenChangeListener) {
+        mFullScreenChangeListener = fullScreenChangeListener;
+        return this;
+    }
+
+    public boolean isFullscreen() {
+        return mFullscreen;
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        if (mMainHandler != null) {
+            mMainHandler.removeCallbacksAndMessages(null);
+        }
     }
 
     @Override
@@ -242,7 +289,10 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         if (mEnabled) {
             IjkVideoManager.getInstance().setStateChangeListener(this);
             debug("当前为启动状态");
-            playMedia();
+            if (mDelayStart) {
+                mDelayStart = false;
+                playMedia();
+            }
         }
     }
 
@@ -285,20 +335,18 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     @Override
     public void setVideoView(IVideoView videoView) {
         mVideoView = videoView;
+        handleAutoPlay();
     }
 
     @Override
     public void notifyPlayState(int state) {
 
-        boolean oldLoading = mShowLoading;
         if (state == IjkVideoManager.STATE_PREPARING || state == IjkVideoManager.STATE_BUFFERING_START) {
             mShowLoading = true;
         } else {
             mShowLoading = false;
         }
-        if (oldLoading != mShowLoading){
-            mMainHandler.sendEmptyMessage(HANDLE_LOADING);
-        }
+        mMainHandler.sendEmptyMessage(HANDLE_LOADING);
 
         switch (state) {
             case IjkVideoManager.STATE_IDLE://闲置中
@@ -313,6 +361,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 mMainHandler.sendEmptyMessage(UPDATE_THUMB);
                 break;
             case IjkVideoManager.STATE_PREPARED://准备好
+
                 break;
             case IjkVideoManager.STATE_PLAYING://播放中
                 mShowPlay = false;
@@ -344,25 +393,58 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
         switch (screenOrientation) {
             case ActivityInfo.SCREEN_ORIENTATION_PORTRAIT://竖屏
+                mFullscreen = false;
                 mBtnFullscreen.setImageResource(R.drawable.video_enlarge);
                 break;
             case ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE://横屏
             case ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE://反向横屏
+                mFullscreen = true;
                 mBtnFullscreen.setImageResource(R.drawable.video_shrink);
+                setFocusableInTouchMode(true);
+                requestFocus();
                 break;
         }
+
+        if (mFullScreenChangeListener != null) {
+            mFullScreenChangeListener.onFullScreenChange(mFullscreen);
+        }
+
         show();
     }
 
-    private void init() {
+    public void toggleScreenOrientation() {
+        if (mFullScreenMode == FULLSCREEN_ORIENTATION) {
+            //当前为旋转屏幕的全屏模式
+            mOrientationUtils.toggleScreenOrientation();
+        }
+    }
 
-        mOrientationUtils = new OrientationUtils(Activity.class.cast(getContext()));
+    private void init(Context context) {
+
+        mContext = Activity.class.cast(context);
+
+        mOrientationUtils = new OrientationUtils(mContext);
         mOrientationUtils.setCallback(this);
         mOrientationUtils.setEnable(mEnableOrientation);
 
         setBackgroundColor(Color.TRANSPARENT);
         setClickable(true);
+
+        setOnKeyListener(mOrientationKeyListener);
     }
+
+    /** 对通过旋转屏幕来全屏的返回键处理 */
+    private final OnKeyListener mOrientationKeyListener = new OnKeyListener() {
+        @Override
+        public boolean onKey(View v, int keyCode, KeyEvent event) {
+            if (mFullscreen && mFullScreenMode == FULLSCREEN_ORIENTATION) {
+                //当前为旋转屏幕的全屏模式
+                toggleScreenOrientation();
+                return true;
+            }
+            return false;
+        }
+    };
 
     private final Handler mMainHandler = new Handler(Looper.getMainLooper()) {
 
@@ -589,21 +671,11 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             mImgThumb.setImageResource(mThumbRes);
         }
 
-        mBtnFullscreen.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (!mEnabled) {
-                    showInfo(NOT_READY_INFO);
-                    return;
-                }
-                mOrientationUtils.toggleScreenOrientation();
-            }
-        });
+        mBtnFullscreen.setOnClickListener(mFullScreenListener);
 
         mBtnPlay.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
-
                 if (mEnabled) {
                     if (IjkVideoManager.getInstance().isPlaying()) {
                         pauseMedia();
@@ -611,12 +683,120 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                         playMedia();
                     }
                 } else if (mVideoView != null) {
+                    mDelayStart = true;
                     mVideoView.openVideo();
                 }
             }
         });
 
         mSeekProgress.setOnSeekBarChangeListener(mOnSeekBarChangeListener);
+
+    }
+
+
+    private OnClickListener mFullScreenListener = new OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            if (!mEnabled) {
+                showInfo(NOT_READY_INFO);
+                return;
+            }
+            if (mFullScreenMode == FULLSCREEN_ORIENTATION) {
+                mOrientationUtils.toggleScreenOrientation();
+            } else {
+                if (!mFullscreen) {
+                    addFullScreenView();
+                } else {
+                    removeFullScreenView();
+                }
+            }
+        }
+    };
+
+    private void addFullScreenView() {
+
+        ViewGroup viewGroup = (ViewGroup) mContext.findViewById(Window.ID_ANDROID_CONTENT);
+        if (viewGroup == null) {
+            return;
+        }
+
+        //清除旧的
+        if (mFullScreenView != null) {
+            int index = viewGroup.indexOfChild(mFullScreenView);
+            if (index > -1) {
+                viewGroup.removeView(mFullScreenView);
+            }
+            mFullScreenView = null;
+        }
+
+        mSystemUiVisibility = mContext.getWindow().getDecorView().getSystemUiVisibility();
+
+        fullScreen();
+
+        IjkVideoManager.getInstance().clearVideoView();
+        IjkVideoManager.getInstance().clearStateChangeListener();
+
+        mFullScreenView = new IjkVideoView(mContext);
+        final IjkVideoView ijkVideoView = (IjkVideoView) mFullScreenView;
+        if (mVideoView.getPauseBitmap() != null) {
+            ijkVideoView.setPauseBitmap(Bitmap.createBitmap(mVideoView.getPauseBitmap()));
+        }
+        ijkVideoView.setSettings(mVideoView.getSettings());
+        final MediaController mediaController = new MediaController(mContext);
+        //全屏播放器可以处理返回按键
+        mediaController.setFocusableInTouchMode(true);
+        mediaController.requestFocus();
+        mediaController.setOnKeyListener(new OnKeyListener() {
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
+                    //按下返回按键
+                    if (mediaController.isFullscreen()) {
+                        mediaController.toggleScreenOrientation();
+                    } else {
+                        if (ijkVideoView.getPauseBitmap() != null) {
+                            mVideoView.setPauseBitmap(Bitmap.createBitmap(ijkVideoView.getPauseBitmap()));
+                        }
+                        removeFullScreenView();
+                    }
+                    return true;
+                }
+                return false;
+            }
+        });
+        mediaController.setShowThumb(false);
+        ijkVideoView.setMediaController(mediaController);
+        ijkVideoView.setVideoPath("http://baobab.wdjcdn.com/14564977406580.mp4");
+        IjkVideoManager.getInstance().setVideoView(ijkVideoView);
+        IjkVideoManager.getInstance().setStateChangeListener(mediaController);
+        IjkVideoManager.getInstance().setPlayPosition(-1);
+        IjkVideoManager.getInstance().refreshRenderView();
+
+
+        ViewGroup.LayoutParams layoutParams = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        viewGroup.addView(mFullScreenView, layoutParams);
+
+
+    }
+
+    private void removeFullScreenView() {
+
+
+        if (mFullScreenView != null) {
+            ViewGroup viewGroup = (ViewGroup) mFullScreenView.getParent();
+            viewGroup.removeView(mFullScreenView);
+            mFullScreenView = null;
+        }
+
+        if (mSystemUiVisibility != -1) {
+            mContext.getWindow().getDecorView().setSystemUiVisibility(mSystemUiVisibility);
+        }
+        if (mVideoView != null) {
+            //恢复
+            IjkVideoManager.getInstance().setVideoView(mVideoView);
+            IjkVideoManager.getInstance().setStateChangeListener(this);
+            IjkVideoManager.getInstance().refreshRenderView();
+        }
 
     }
 
@@ -656,6 +836,27 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private boolean isActive() {
         return mPlayPosition == IjkVideoManager.getInstance().getPlayPosition();
     }
+
+    private void handleAutoPlay() {
+        if (mAutoStartPlay) {
+            if (mEnabled) {
+                if (!IjkVideoManager.getInstance().isPlaying()) {
+                    playMedia();
+                }
+            } else if (mVideoView != null) {
+                mVideoView.openVideo();
+            }
+        }
+    }
+
+    public interface OnFullScreenChangeListener {
+
+        void onFullScreenChange(boolean fullscreen);
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // uitl
+    ///////////////////////////////////////////////////////////////////////////
 
     private Toast mToast;
 
@@ -698,5 +899,21 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         Log.e(TAG, info);
     }
 
+    private void fullScreen() {
 
+        //隐藏 ActionBar/Toolbar
+        if (mContext instanceof AppCompatActivity) {
+            AppCompatActivity appCompatActivity = AppCompatActivity.class.cast(mContext);
+            if (appCompatActivity.getSupportActionBar() != null) {
+                ActionBar actionBar = appCompatActivity.getSupportActionBar();
+//                actionBar.setShowHideAnimationEnabled(false);
+                actionBar.hide();
+            }
+        }
+
+        //fullscreen
+        mContext.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN
+                , WindowManager.LayoutParams.FLAG_FULLSCREEN);
+
+    }
 }

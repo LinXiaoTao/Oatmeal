@@ -97,6 +97,7 @@ public class IjkVideoView extends FrameLayout implements IVideoView {
         initVideoView(context);
     }
 
+
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public IjkVideoView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
@@ -108,9 +109,7 @@ public class IjkVideoView extends FrameLayout implements IVideoView {
         mAppContext = context.getApplicationContext();
         mVideoWidth = 0;
         mVideoHeight = 0;
-        setFocusable(true);
-        setFocusableInTouchMode(true);
-        requestFocus();
+
     }
 
     public int getPlayPosition() {
@@ -120,6 +119,16 @@ public class IjkVideoView extends FrameLayout implements IVideoView {
     public IjkVideoView setPlayPosition(int playPosition) {
         mPlayPosition = playPosition;
         return this;
+    }
+
+    @Override
+    public void setSettings(Settings settings) {
+        mSettings = settings;
+    }
+
+    @Override
+    public Settings getSettings() {
+        return mSettings;
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -134,7 +143,10 @@ public class IjkVideoView extends FrameLayout implements IVideoView {
         View contentView = mediaController.makeControllerView();
         LayoutParams layoutParams = generateDefaultLayoutParams();
         addView(contentView, layoutParams);
-        mediaController.setVideoView(this);
+        // TODO: 2017/8/17 这里将 setVideoView 延迟到 setUri 之后，是否合理？
+        if (mUri != null) {
+            mediaController.setVideoView(this);
+        }
         mediaController.setEnabled(mPrepared);
     }
 
@@ -158,19 +170,25 @@ public class IjkVideoView extends FrameLayout implements IVideoView {
      */
     public void setVideoURI(Uri uri) {
         setVideoURI(uri, null);
+
     }
 
     private void setVideoURI(Uri uri, Settings settings) {
         mUri = uri;
-        mSettings = settings;
+        if (settings != null) {
+            mSettings = settings;
+        }
         mVideoRotationDegree = 0;
+        if (mMediaController != null) {
+            mMediaController.setVideoView(this);
+        }
     }
 
     @Override
     public void openVideo() {
 
         //兼容列表，防止重复设置播放地址
-        if (mPlayPosition == IjkVideoManager.getInstance().getPlayPosition()){
+        if (mPlayPosition == IjkVideoManager.getInstance().getPlayPosition()) {
             return;
         }
 
@@ -224,7 +242,7 @@ public class IjkVideoView extends FrameLayout implements IVideoView {
         if (IjkVideoManager.getInstance().getPlayPosition() == mPlayPosition) {
             IjkVideoManager.getInstance().setPlayPosition(-1);
         }
-        if (IjkVideoManager.getInstance().getStateChangeListener() == mMediaController){
+        if (IjkVideoManager.getInstance().getStateChangeListener() == mMediaController) {
             IjkVideoManager.getInstance().setStateChangeListener(null);
         }
     }
@@ -357,6 +375,7 @@ public class IjkVideoView extends FrameLayout implements IVideoView {
     ///////////////////////////////////////////////////////////////////////////
     // render
     ///////////////////////////////////////////////////////////////////////////
+    // TODO: 2017/8/17 当前都是基于 TextureRenderView
 
     public static final int RENDER_NONE = 0;
     public static final int RENDER_SURFACE_VIEW = 1;
@@ -470,7 +489,7 @@ public class IjkVideoView extends FrameLayout implements IVideoView {
                 return;
             }
             mSurfaceHolder = holder;
-            IjkVideoManager.getInstance().bindSurfaceHolder(IjkVideoView.this, holder);
+            IjkVideoManager.getInstance().bindSurfaceHolder(IjkVideoView.this, mSurfaceHolder);
             showPauseCover();
         }
 
@@ -486,6 +505,24 @@ public class IjkVideoView extends FrameLayout implements IVideoView {
 
 
     private Bitmap mPauseBitmap;
+
+    @Override
+    public Bitmap getPauseBitmap() {
+        return mPauseBitmap;
+    }
+
+    @Override
+    public void setPauseBitmap(Bitmap pauseBitmap) {
+        releasePauseCover();
+        mPauseBitmap = pauseBitmap;
+    }
+
+    /** 更新暂停时的封面 */
+    private void updatePauseCover() {
+        if (mPauseBitmap == null || mPauseBitmap.isRecycled()) {
+            initCover();
+        }
+    }
 
     /** 显示暂停切换显示的bitmap */
     private void showPauseCover() {
@@ -511,13 +548,6 @@ public class IjkVideoView extends FrameLayout implements IVideoView {
         if (mPauseBitmap != null && !mPauseBitmap.isRecycled()) {
             mPauseBitmap.recycle();
             mPauseBitmap = null;
-        }
-    }
-
-    /** 更新暂停时的封面 */
-    private void updatePauseCover() {
-        if (mPauseBitmap == null || mPauseBitmap.isRecycled()) {
-            initCover();
         }
     }
 

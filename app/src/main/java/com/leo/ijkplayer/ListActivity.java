@@ -75,7 +75,7 @@ public class ListActivity extends AppCompatActivity {
         if (mPrePlayPosition != position && !isVisible(mPrePlayPosition)) {
             mPrePlayPosition = position;
             ViewHolder viewHolder = (ViewHolder) mRecyclerView.findViewHolderForAdapterPosition(position);
-            viewHolder.video.openVideo();
+//            viewHolder.video.openVideo();
         }
     }
 
@@ -103,6 +103,12 @@ public class ListActivity extends AppCompatActivity {
         IjkVideoManager.getInstance().release();
     }
 
+    @Override
+    public void onBackPressed() {
+        super.onBackPressed();
+
+    }
+
     private static class Adapter extends RecyclerView.Adapter<ViewHolder> {
 
 
@@ -112,6 +118,7 @@ public class ListActivity extends AppCompatActivity {
             ViewHolder viewHolder = new ViewHolder(contentView);
             viewHolder.controller = new MediaController(parent.getContext());
             viewHolder.controller.setThumbRes(R.drawable.xxx2);
+            viewHolder.controller.setFullScreenMode(MediaController.FULLSCREEN_VIEW);
             viewHolder.video.setMediaController(viewHolder.controller);
             return viewHolder;
         }
