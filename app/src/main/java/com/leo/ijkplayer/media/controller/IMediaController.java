@@ -2,6 +2,8 @@ package com.leo.ijkplayer.media.controller;
 
 import android.view.View;
 
+import com.leo.ijkplayer.media.videoview.IVideoView;
+
 /**
  * Created on 2017/8/10 上午10:38.
  * leo linxiaotao1993@vip.qq.com
@@ -9,18 +11,9 @@ import android.view.View;
 
 public interface IMediaController {
 
-    void hide();
-
-    void setEnabled(boolean enabled);
-
-    void setMediaPlayer(IPlayerControl playerControl);
-
-    void show();
-
-    void show(int timeout);
-
     View makeControllerView();
 
-    void notifyPlayState(int state);
+    void setVideoView(IVideoView videoView);
 
+    void setEnabled(boolean enable);
 }

@@ -14,6 +14,8 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.leo.ijkplayer.media.datasource.FileMediaDataSource;
+import com.leo.ijkplayer.media.render.IRenderView;
+import com.leo.ijkplayer.media.videoview.IVideoView;
 
 import java.io.File;
 import java.lang.ref.WeakReference;
@@ -44,9 +46,12 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     ///////////////////////////////////////////////////////////////////////////
     /** 当前播放的 Uri */
     private Uri mUri;
-    /** video view */
-    /** 因为 manager 是单例，所以在列表中使用时，要注意 videoview 的更新 */
+    /**
+     * video view
+     * 因为 manager 是单例，所以在列表中使用时，要注意 videoview 的更新
+     */
     private WeakReference<IVideoView> mVideoView;
+    private WeakReference<StateChangeListener> mStateChangeListener;
     /** ijk so loader */
     private static IjkLibLoader sIjkLibLoader;
     /** 当前是否为静音 */
@@ -55,7 +60,8 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     private boolean mNeedTimeOut = true;
     /** 缓冲超时时间 */
     private int mTimeOut = DEFAULT_TIMEOUT;
-
+    /** 兼容列表播放，记录当前播放序号 */
+    private int mPlayPosition = -1;
     ///////////////////////////////////////////////////////////////////////////
     // 常量区
     ///////////////////////////////////////////////////////////////////////////
@@ -70,6 +76,21 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     /** 超时错误码 */
     private static final int TIMEOUT_ERROR = -192;
 
+    /** 错误状态 */
+    public static final int STATE_ERROR = -1;
+    /** 闲置中 */
+    public static final int STATE_IDLE = 0;
+    /** 准备中 */
+    public static final int STATE_PREPARING = 1;
+    /** 准备好 */
+    public static final int STATE_PREPARED = 2;
+    /** 播放中 */
+    public static final int STATE_PLAYING = 3;
+    /** 暂停中 */
+    public static final int STATE_PAUSED = 4;
+    /** 播放完成 */
+    public static final int STATE_PLAYBACK_COMPLETED = 5;
+
     ///////////////////////////////////////////////////////////////////////////
     // 内部使用变量
     ///////////////////////////////////////////////////////////////////////////
@@ -78,6 +99,17 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     private Handler mMainThreadHandler;
     private IMediaPlayer mMediaPlayer;
     private final TimeOutRunnable mTimeOutRunnable = new TimeOutRunnable();
+    private int mCurrentState = STATE_IDLE;
+    private int mTargetState = STATE_IDLE;
+
+    private long mPrepareStartTime = 0;
+    private long mPrepareEndTime = 0;
+    private long mSeekStartTime = 0;
+    private long mSeekEndTime = 0;
+    /** 缓冲中记录拖动位置 */
+    private int mSeekWhenPrepared;
+    /** 当前缓冲百分比 */
+    private int mCurrentBufferPercentage;
 
 
     public static IjkVideoManager getInstance() {
@@ -96,9 +128,13 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
         mMainThreadHandler = new Handler(Looper.getMainLooper());
     }
 
-    /** 获取当前 media player */
-    public IMediaPlayer getMediaPlayer() {
-        return mMediaPlayer;
+    public IjkVideoManager setPlayPosition(int playPosition) {
+        mPlayPosition = playPosition;
+        return this;
+    }
+
+    public int getPlayPosition() {
+        return mPlayPosition;
     }
 
     /**
@@ -109,6 +145,8 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
      */
     public void setVideoUri(@NonNull Uri uri, Settings settings) {
         mUri = uri;
+        mCurrentState = STATE_PREPARING;
+        notifyStateChange();
         Message message = mMediaHandler.obtainMessage(HANDLER_PREPARE);
         message.obj = settings;
         mMediaHandler.sendMessage(message);
@@ -117,29 +155,143 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
         }
     }
 
-    /** 释放 media player */
+    public boolean isPlaying() {
+        return isInPlaybackState() && mMediaPlayer.isPlaying();
+    }
+
+    public int getDuration() {
+        if (isInPlaybackState()) {
+            return (int) mMediaPlayer.getDuration();
+        }
+
+        return -1;
+    }
+
+    public int getCurrentPosition() {
+        if (isInPlaybackState()) {
+            return (int) mMediaPlayer.getCurrentPosition();
+        }
+        return 0;
+    }
+
+    public void seekTo(int msec) {
+        if (isInPlaybackState()) {
+            mSeekStartTime = System.currentTimeMillis();
+            mMediaPlayer.seekTo(msec);
+            mSeekWhenPrepared = 0;
+        } else {
+            mSeekWhenPrepared = msec;
+        }
+    }
+
+    public int getBufferPercentage() {
+        return mCurrentBufferPercentage;
+    }
+
+    public void start() {
+        if (isInPlaybackState()) {
+            mMediaPlayer.start();
+            mCurrentState = STATE_PLAYING;
+            notifyStateChange();
+            IVideoView iVideoView = getVideoView();
+            if (iVideoView != null && mMediaPlayer.isPlaying()) {
+                iVideoView.onStartPlayer(mMediaPlayer);
+            }
+        }
+        mTargetState = STATE_PLAYING;
+    }
+
+    public void handleSeekWhenPrepared() {
+        if (mSeekWhenPrepared != 0) {
+            seekTo(mSeekWhenPrepared);
+        }
+    }
+
+    public void bindSurfaceHolder(IVideoView videoView, IRenderView.ISurfaceHolder holder) {
+        if (mMediaPlayer == null || videoView == null || videoView != getVideoView()) {
+            return;
+        }
+        if (holder == null) {
+            mMediaPlayer.setDisplay(null);
+            return;
+        }
+
+        holder.bindToMediaPlayer(mMediaPlayer);
+    }
+
+    public void pause() {
+        if (isInPlaybackState()) {
+            if (mMediaPlayer.isPlaying()) {
+                mMediaPlayer.pause();
+                mCurrentState = STATE_PAUSED;
+                notifyStateChange();
+                IVideoView iVideoView = getVideoView();
+                if (iVideoView != null && !mMediaPlayer.isPlaying()) {
+                    iVideoView.onPausePlayer(mMediaPlayer);
+                }
+            }
+        }
+        mTargetState = STATE_PAUSED;
+    }
+
     public void release() {
         Message message = mMediaHandler.obtainMessage(HANDLER_RELEASE);
         mMediaHandler.sendMessage(message);
     }
+
 
     public static void setIjkLibLoader(IjkLibLoader ijkLibLoader) {
         sIjkLibLoader = ijkLibLoader;
     }
 
     public IjkVideoManager setVideoView(@Nullable IVideoView videoView) {
-        IVideoView oldVideoView = videoView();
-        if (oldVideoView != null){
+        IVideoView oldVideoView = getVideoView();
+        if (oldVideoView != null && oldVideoView != videoView) {
             //这里我们暂先让旧的 videoview，先走 release 回调
             oldVideoView.onReleasePlayer();
         }
-
-        if (videoView == null) {
+        if (mVideoView != null) {
             mVideoView = null;
-        } else {
+        }
+
+        if (videoView != null) {
             mVideoView = new WeakReference<>(videoView);
         }
+
         return this;
+    }
+
+    public IjkVideoManager setStateChangeListener(@Nullable StateChangeListener stateChangeListener) {
+        StateChangeListener oldListener = getStateChangeListener();
+        if (oldListener != null && oldListener != stateChangeListener) {
+            oldListener.notifyPlayState(STATE_IDLE);
+        }
+        if (mStateChangeListener != null) {
+            mStateChangeListener = null;
+        }
+
+        if (stateChangeListener != null) {
+            mStateChangeListener = new WeakReference<>(stateChangeListener);
+            stateChangeListener.notifyPlayState(mCurrentState);
+        }
+
+        return this;
+    }
+
+    @Nullable
+    public IVideoView getVideoView() {
+        if (mVideoView != null) {
+            return mVideoView.get();
+        }
+        return null;
+    }
+
+    @Nullable
+    public StateChangeListener getStateChangeListener() {
+        if (mStateChangeListener != null) {
+            return mStateChangeListener.get();
+        }
+        return null;
     }
 
     /**
@@ -175,8 +327,10 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
         mMainThreadHandler.post(new Runnable() {
             @Override
             public void run() {
+                mCurrentState = STATE_PREPARED;
+                notifyStateChange();
                 cancelTimeOutRunnable();
-                IVideoView iVideoView = videoView();
+                IVideoView iVideoView = getVideoView();
                 if (iVideoView != null) {
                     iVideoView.onPrepared(mp);
                 }
@@ -187,11 +341,14 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     @Override
     public void onCompletion(final IMediaPlayer mp) {
         debugLog("onCompletion");
+
         mMainThreadHandler.post(new Runnable() {
             @Override
             public void run() {
+                mCurrentState = STATE_PLAYBACK_COMPLETED;
+                notifyStateChange();
                 cancelTimeOutRunnable();
-                IVideoView iVideoView = videoView();
+                IVideoView iVideoView = getVideoView();
                 if (iVideoView != null) {
                     iVideoView.onCompletion(mp);
                 }
@@ -202,10 +359,11 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     @Override
     public void onBufferingUpdate(final IMediaPlayer mp, final int percent) {
         debugLog("onBufferingUpdate");
+        mCurrentBufferPercentage = percent;
         mMainThreadHandler.post(new Runnable() {
             @Override
             public void run() {
-                IVideoView iVideoView = videoView();
+                IVideoView iVideoView = getVideoView();
                 if (iVideoView != null) {
                     iVideoView.onBufferingUpdate(mp, percent);
                 }
@@ -220,7 +378,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
             @Override
             public void run() {
                 cancelTimeOutRunnable();
-                IVideoView iVideoView = videoView();
+                IVideoView iVideoView = getVideoView();
                 if (iVideoView != null) {
                     iVideoView.onSeekComplete(mp);
                 }
@@ -234,8 +392,10 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
         mMainThreadHandler.post(new Runnable() {
             @Override
             public void run() {
+                mCurrentState = STATE_ERROR;
+                notifyStateChange();
                 cancelTimeOutRunnable();
-                IVideoView iVideoView = videoView();
+                IVideoView iVideoView = getVideoView();
                 if (iVideoView != null) {
                     iVideoView.onError(mp, what, extra);
                 }
@@ -260,7 +420,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
                     }
                 }
 
-                IVideoView iVideoView = videoView();
+                IVideoView iVideoView = getVideoView();
                 if (iVideoView != null) {
                     iVideoView.onInfo(mp, what, extra);
                 }
@@ -275,7 +435,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
         mMainThreadHandler.post(new Runnable() {
             @Override
             public void run() {
-                IVideoView iVideoView = videoView();
+                IVideoView iVideoView = getVideoView();
                 if (iVideoView != null) {
                     iVideoView.onVideoSizeChanged(mp, width, height, sar_num, sar_den);
                 }
@@ -289,7 +449,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
         mMainThreadHandler.post(new Runnable() {
             @Override
             public void run() {
-                IVideoView iVideoView = videoView();
+                IVideoView iVideoView = getVideoView();
                 if (iVideoView != null) {
                     iVideoView.onTimedText(mp, text);
                 }
@@ -322,7 +482,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
 
         @Override
         public void run() {
-            IVideoView iVideoView = videoView();
+            IVideoView iVideoView = getVideoView();
             if (iVideoView != null) {
                 iVideoView.onError(mMediaPlayer, TIMEOUT_ERROR, TIMEOUT_ERROR);
             }
@@ -377,7 +537,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
             mMainThreadHandler.post(new Runnable() {
                 @Override
                 public void run() {
-                    IVideoView videoView = videoView();
+                    IVideoView videoView = getVideoView();
                     if (videoView != null) {
                         videoView.onCreatePlayer(mMediaPlayer);
                     }
@@ -396,11 +556,21 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
 
     }
 
+    private void notifyStateChange() {
+        StateChangeListener stateChangeListener = getStateChangeListener();
+        if (stateChangeListener != null) {
+            stateChangeListener.notifyPlayState(mCurrentState);
+        }
+    }
+
     /** 释放视频管理器 */
     private void releaseVideoManager() {
         releasePlayer(true);
         setMute(false);
         cancelTimeOutRunnable();
+        mCurrentState = STATE_IDLE;
+        notifyStateChange();
+        mPlayPosition = -1;
     }
 
     /** 释放播放器 */
@@ -411,7 +581,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
             mMediaPlayer = null;
         }
 
-        IVideoView iVideoView = videoView();
+        IVideoView iVideoView = getVideoView();
         if (iVideoView != null && notify) {
             iVideoView.onReleasePlayer();
         }
@@ -462,7 +632,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
         } else {
             ijkMediaPlayer = new IjkMediaPlayer();
         }
-        IjkMediaPlayer.native_setLogLevel(IjkMediaPlayer.IJK_LOG_DEBUG);
+//        IjkMediaPlayer.native_setLogLevel(IjkMediaPlayer.IJK_LOG_DEBUG);
         ijkMediaPlayer.setSpeed(settings.getSpeed());
         ijkMediaPlayer.setLooping(settings.isLooping());
         if (settings.getUsingMediaCodec()) {
@@ -502,11 +672,12 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
         return ijkMediaPlayer;
     }
 
-    private IVideoView videoView() {
-        if (mVideoView != null) {
-            return mVideoView.get();
-        }
-        return null;
+
+    private boolean isInPlaybackState() {
+        return (mMediaPlayer != null &&
+                mCurrentState != STATE_ERROR &&
+                mCurrentState != STATE_IDLE &&
+                mCurrentState != STATE_PREPARING);
     }
 
     private void debugLog(String message) {

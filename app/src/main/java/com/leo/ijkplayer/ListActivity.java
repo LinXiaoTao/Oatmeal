@@ -9,7 +9,8 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
-import com.leo.ijkplayer.media.IjkVideoView;
+import com.leo.ijkplayer.media.IjkVideoManager;
+import com.leo.ijkplayer.media.videoview.IjkVideoView;
 import com.leo.ijkplayer.media.controller.MediaController;
 
 /**
@@ -20,6 +21,9 @@ import com.leo.ijkplayer.media.controller.MediaController;
 public class ListActivity extends AppCompatActivity {
 
     private RecyclerView mRecyclerView;
+    private LinearLayoutManager mLinearLayoutManager;
+    /** 上一次播放下标 */
+    private int mPrePlayPosition = -1;
 
     private static final String VIDEO_URL = "http://baobab.wdjcdn.com/14564977406580.mp4";
 
@@ -30,9 +34,74 @@ public class ListActivity extends AppCompatActivity {
 
 
         mRecyclerView = (RecyclerView) findViewById(R.id.recyclerview);
-        mRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        mRecyclerView.setLayoutManager(mLinearLayoutManager = new LinearLayoutManager(this));
         mRecyclerView.setAdapter(new Adapter());
+        mRecyclerView.post(new Runnable() {
+            @Override
+            public void run() {
+                autoPlay();
+            }
+        });
+        mRecyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
 
+            @Override
+            public void onScrollStateChanged(RecyclerView recyclerView, int newState) {
+                super.onScrollStateChanged(recyclerView, newState);
+                if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                    autoPlay();
+                }
+            }
+
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+
+                if (IjkVideoManager.getInstance().getPlayPosition() > -1) {
+                    int position = IjkVideoManager.getInstance().getPlayPosition();
+                    if (!isVisible(position)) {
+                        IjkVideoManager.getInstance().release();
+                        mRecyclerView.getAdapter().notifyItemChanged(position);
+                    }
+                }
+            }
+        });
+
+    }
+
+    /** 自动播放 */
+    private void autoPlay(){
+        int firstVisibleItem = mLinearLayoutManager.findFirstVisibleItemPosition();
+        int lastVisibleItem = mLinearLayoutManager.findLastVisibleItemPosition();
+        int position = (firstVisibleItem + lastVisibleItem) / 2;
+        if (mPrePlayPosition != position && !isVisible(mPrePlayPosition)) {
+            mPrePlayPosition = position;
+            ViewHolder viewHolder = (ViewHolder) mRecyclerView.findViewHolderForAdapterPosition(position);
+            viewHolder.video.openVideo();
+        }
+    }
+
+    /**
+     * 当前下标是否可见
+     *
+     * @param position
+     * @return
+     */
+    private boolean isVisible(int position) {
+        int firstVisibleItem = mLinearLayoutManager.findFirstVisibleItemPosition();
+        int lastVisibleItem = mLinearLayoutManager.findLastVisibleItemPosition();
+        return !(position < firstVisibleItem || position > lastVisibleItem);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        IjkVideoManager.getInstance().pause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        IjkVideoManager.getInstance().release();
     }
 
     private static class Adapter extends RecyclerView.Adapter<ViewHolder> {
@@ -50,7 +119,7 @@ public class ListActivity extends AppCompatActivity {
         @Override
         public void onBindViewHolder(ViewHolder holder, int position) {
             holder.video.setVideoPath(VIDEO_URL);
-
+            holder.video.setPlayPosition(position);
         }
 
         @Override

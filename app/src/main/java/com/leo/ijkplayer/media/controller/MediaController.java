@@ -23,8 +23,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.leo.ijkplayer.R;
-import com.leo.ijkplayer.media.IjkVideoView;
+import com.leo.ijkplayer.media.IjkVideoManager;
+import com.leo.ijkplayer.media.StateChangeListener;
 import com.leo.ijkplayer.media.util.OrientationUtils;
+import com.leo.ijkplayer.media.videoview.IVideoView;
 import com.leo.ijkplayer.media.weiget.ENDownloadView;
 import com.leo.ijkplayer.media.weiget.ENPlayView;
 
@@ -37,7 +39,8 @@ import java.util.Locale;
  * leo linxiaotao1993@vip.qq.com
  */
 
-public class MediaController extends FrameLayout implements IMediaController, OrientationUtils.Callback {
+public class MediaController extends FrameLayout implements IMediaController, OrientationUtils.Callback
+        , StateChangeListener {
 
     private static final String TAG = "MediaController";
 
@@ -47,6 +50,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     ///////////////////////////////////////////////////////////////////////////
     /** 是否显示底部进度条 */
     private boolean mShowBottomProgress = true;
+    /** 兼容列表播放，记录当前播放序号 */
+    private int mPlayPosition = -1;
 
     ///////////////////////////////////////////////////////////////////////////
     // 常量区
@@ -79,8 +84,10 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     ///////////////////////////////////////////////////////////////////////////
     // 内部变量
     ///////////////////////////////////////////////////////////////////////////
-    private IPlayerControl mPlayerControl;
     private OrientationUtils mOrientationUtils;
+    private IVideoView mVideoView;
+    /** 记录暂停时的播放进度 */
+    private int mOldPlayPosition;
     /** 当前是否为全屏显示 */
     private boolean mFullscreen;
     /** 是否显示播放按钮 */
@@ -109,21 +116,21 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         init();
     }
 
+    public int getPlayPosition() {
+        return mPlayPosition;
+    }
+
+    public MediaController setPlayPosition(int playPosition) {
+        mPlayPosition = playPosition;
+        return this;
+    }
+
     public MediaController setFullscreen(boolean fullscreen) {
         mFullscreen = fullscreen;
         if (mBtnFullscreen != null) {
             mBtnFullscreen.setImageResource(mFullscreen ? R.drawable.video_shrink : R.drawable.video_enlarge);
         }
         return this;
-    }
-
-    @Override
-    protected void onDetachedFromWindow() {
-        super.onDetachedFromWindow();
-        if (mOrientationUtils != null) {
-            mOrientationUtils.release();
-            mOrientationUtils = null;
-        }
     }
 
     @Override
@@ -136,27 +143,27 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 keyCode != KeyEvent.KEYCODE_CALL &&
                 keyCode != KeyEvent.KEYCODE_ENDCALL;
 
-        if (mEnabled && isKeyCodeSupported && mPlayerControl != null) {
+        if (mEnabled && isKeyCodeSupported) {
             if (keyCode == KeyEvent.KEYCODE_HEADSETHOOK ||
                     keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
-                if (mPlayerControl.isPlaying()) {
-                    mPlayerControl.pause();
+                if (IjkVideoManager.getInstance().isPlaying()) {
+                    IjkVideoManager.getInstance().pause();
                     show();
                 } else {
-                    mPlayerControl.start();
+                    IjkVideoManager.getInstance().start();
                     hide();
                 }
                 return true;
             } else if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY) {
-                if (!mPlayerControl.isPlaying()) {
-                    mPlayerControl.start();
+                if (!IjkVideoManager.getInstance().isPlaying()) {
+                    IjkVideoManager.getInstance().start();
                     hide();
                 }
                 return true;
             } else if (keyCode == KeyEvent.KEYCODE_MEDIA_STOP
                     || keyCode == KeyEvent.KEYCODE_MEDIA_PAUSE) {
-                if (mPlayerControl.isPlaying()) {
-                    mPlayerControl.pause();
+                if (IjkVideoManager.getInstance().isPlaying()) {
+                    IjkVideoManager.getInstance().pause();
                     show();
                 }
                 return true;
@@ -170,7 +177,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
-        if (mEnabled && mPlayerControl != null) {
+        if (mEnabled) {
             toggleMediaControlsVisiblity();
         }
         return false;
@@ -178,15 +185,14 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
     @Override
     public boolean onTrackballEvent(MotionEvent ev) {
-        if (mEnabled && mPlayerControl != null) {
+        if (mEnabled) {
             toggleMediaControlsVisiblity();
         }
         return false;
     }
 
 
-    @Override
-    public void hide() {
+    private void hide() {
 
         mShowing = false;
 
@@ -197,22 +203,18 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     public void setEnabled(boolean enabled) {
         mEnabled = enabled;
         if (mEnabled) {
+            IjkVideoManager.getInstance().setStateChangeListener(this);
             debug("当前为启动状态");
+            playMedia();
         }
     }
 
-    @Override
-    public void setMediaPlayer(IPlayerControl playerControl) {
-        mPlayerControl = playerControl;
-    }
 
-    @Override
     public void show() {
         show(DEFALUT_TIMEOUT);
     }
 
 
-    @Override
     public void show(int timeout) {
 
         mMainHandler.sendEmptyMessage(SHOW_LAYOUT);
@@ -234,6 +236,9 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
     @Override
     public View makeControllerView() {
+        if (getChildCount() > 0) {
+            removeAllViews();
+        }
         LayoutInflater layoutInflater = LayoutInflater.from(getContext());
         View contentView = layoutInflater.inflate(R.layout.media_controller, this, true);
         initControllerView(contentView);
@@ -241,30 +246,40 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     }
 
     @Override
+    public void setVideoView(IVideoView videoView) {
+        mVideoView = videoView;
+    }
+
+    @Override
     public void notifyPlayState(int state) {
 
         switch (state) {
-            case IjkVideoView.STATE_IDLE://闲置中
+            case IjkVideoManager.STATE_IDLE://闲置中
+                mEnabled = false;
                 mShowPlay = true;
                 hide();
                 mMainHandler.removeMessages(SHOW_PROGRESS);
                 mMainHandler.sendEmptyMessage(RESET_LAYOUT);
                 break;
-            case IjkVideoView.STATE_PREPARING://准备中
+            case IjkVideoManager.STATE_PREPARING://准备中
                 break;
-            case IjkVideoView.STATE_PREPARED://准备好
+            case IjkVideoManager.STATE_PREPARED://准备好
                 break;
-            case IjkVideoView.STATE_PLAYING://播放中
+            case IjkVideoManager.STATE_PLAYING://播放中
                 mShowPlay = false;
                 mBtnPlay.play();
                 show();
                 break;
-            case IjkVideoView.STATE_PAUSED://暂停中
+            case IjkVideoManager.STATE_PAUSED://暂停中
+                mOldPlayPosition = IjkVideoManager.getInstance().getCurrentPosition();
                 mBtnPlay.pause();
                 show();
                 break;
-            case IjkVideoView.STATE_PLAYBACK_COMPLETED://播放完成
+            case IjkVideoManager.STATE_PLAYBACK_COMPLETED://播放完成
+                mShowPlay = true;
                 show(0);
+                mMainHandler.removeMessages(SHOW_PROGRESS);
+                mBtnPlay.pause();
                 break;
         }
     }
@@ -304,7 +319,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                     break;
                 case SHOW_PROGRESS:
                     int pos = setProgress();
-                    if (!mDragging && mPlayerControl.isPlaying() && (mShowing || mShowBottomProgress)) {
+                    if (!mDragging && IjkVideoManager.getInstance().isPlaying() && (mShowing || mShowBottomProgress)) {
                         msg = obtainMessage(SHOW_PROGRESS);
                         sendMessageDelayed(msg, 1000 - (pos % 1000));
                     }
@@ -328,12 +343,12 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             mBottomProgressbar.setProgress(0);
             mBottomProgressbar.setSecondaryProgress(0);
         }
-        if (mSeekProgress != null){
+        if (mSeekProgress != null) {
             mSeekProgress.setProgress(0);
             mSeekProgress.setSecondaryProgress(0);
         }
         if (mBtnPlay != null) {
-            updatePausePlay();
+            mBtnPlay.setCurrentState(ENPlayView.STATE_PAUSE);
         }
 
         if (mLoadingView != null) {
@@ -369,8 +384,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             mLoadingView.setVisibility(GONE);
         }
 
-        if (mBtnPlay != null && !mShowPlay) {
-            mBtnPlay.setVisibility(GONE);
+        if (mBtnPlay != null) {
+            mBtnPlay.setVisibility(mShowPlay ? VISIBLE : GONE);
         }
 
         if (mBottomProgressbar != null) {
@@ -388,27 +403,33 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
     /** 开始播放视频 */
     private void playMedia() {
-        if (mPlayerControl != null && !mPlayerControl.isPlaying()) {
-            mPlayerControl.start();
+        if (!IjkVideoManager.getInstance().isPlaying()) {
+            IjkVideoManager.getInstance().start();
             debug("开始播放视频");
         }
     }
 
     /** 暂停视频 */
     private void pauseMedia() {
-        if (mEnabled && mPlayerControl != null && mPlayerControl.isPlaying()) {
-            mPlayerControl.pause();
+        if (mEnabled && IjkVideoManager.getInstance().isPlaying()) {
+            IjkVideoManager.getInstance().pause();
             debug("暂停播放视频");
         }
     }
 
     /** 设置播放进度 */
     private int setProgress() {
-        if (mPlayerControl == null || mDragging) {
+        if (mDragging) {
             return 0;
         }
-        int position = mPlayerControl.getCurrentPosition();
-        int duration = mPlayerControl.getDuration();
+        int position = IjkVideoManager.getInstance().getCurrentPosition();
+        //fix 暂停后第一次获取当前进度值不准确
+        if (mOldPlayPosition != 0 && position - mOldPlayPosition > 2) {
+            mOldPlayPosition = 0;
+            return mOldPlayPosition;
+        }
+
+        int duration = IjkVideoManager.getInstance().getDuration();
 
         if (duration > 0) {
             // use long to avoid overflow
@@ -420,23 +441,24 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             }
         }
         //缓冲进度
-        int percent = mPlayerControl.getBufferPercentage();
+        int percent = IjkVideoManager.getInstance().getBufferPercentage();
         mSeekProgress.setSecondaryProgress((int) (percent / 100f * mSeekProgress.getMax()));
         if (mShowBottomProgress) {
             mBottomProgressbar.setSecondaryProgress((int) (percent / 100f * mSeekProgress.getMax()));
         }
 
         mTextTotal.setText(stringForTime(duration));
+
         mTextCurrent.setText(stringForTime(position));
 
         return position;
     }
 
     private void updatePausePlay() {
-        if (mPlayerControl == null) {
+        if (IjkVideoManager.getInstance() == null) {
             return;
         }
-        if (mPlayerControl.isPlaying()) {
+        if (IjkVideoManager.getInstance().isPlaying()) {
             mBtnPlay.setCurrentState(ENPlayView.STATE_PLAY);
         } else {
             mBtnPlay.setCurrentState(ENPlayView.STATE_PAUSE);
@@ -449,7 +471,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         @Override
         public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
 
-            if (!fromUser || mPlayerControl == null || mSeekProgress == null) {
+            if (!fromUser || mSeekProgress == null) {
                 return;
             }
 
@@ -458,7 +480,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 return;
             }
 
-            long duration = mPlayerControl.getDuration();
+            long duration = IjkVideoManager.getInstance().getDuration();
             long newposition = (duration * progress) / mSeekProgress.getMax();
             if (mTextCurrent != null) {
                 mTextCurrent.setText(stringForTime((int) newposition));
@@ -480,9 +502,9 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
             mDragging = false;
 
-            long duration = mPlayerControl.getDuration();
+            long duration = IjkVideoManager.getInstance().getDuration();
             long newposition = (duration * mSeekProgress.getProgress()) / mSeekProgress.getMax();
-            mPlayerControl.seekTo((int) newposition);
+            IjkVideoManager.getInstance().seekTo((int) newposition);
 
             setProgress();
             updatePausePlay();
@@ -517,14 +539,15 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         mBtnPlay.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (mPlayerControl == null) {
-                    error("play control is null");
-                    return;
-                }
-                if (mPlayerControl.isPlaying()) {
-                    pauseMedia();
-                } else {
-                    playMedia();
+
+                if (mEnabled) {
+                    if (IjkVideoManager.getInstance().isPlaying()) {
+                        pauseMedia();
+                    } else {
+                        playMedia();
+                    }
+                } else if (mVideoView != null) {
+                    mVideoView.openVideo();
                 }
             }
         });

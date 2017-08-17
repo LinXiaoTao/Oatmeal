@@ -3,7 +3,8 @@ package com.leo.ijkplayer;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 
-import com.leo.ijkplayer.media.IjkVideoView;
+import com.leo.ijkplayer.media.IjkVideoManager;
+import com.leo.ijkplayer.media.videoview.IjkVideoView;
 import com.leo.ijkplayer.media.controller.MediaController;
 
 public class MainActivity extends AppCompatActivity {
@@ -26,12 +27,12 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        mIjkVideoView.stop();
+        IjkVideoManager.getInstance().release();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        mIjkVideoView.pause();
+        IjkVideoManager.getInstance().pause();
     }
 }

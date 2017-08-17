@@ -1,4 +1,4 @@
-package com.leo.ijkplayer.media;
+package com.leo.ijkplayer.media.videoview;
 
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkTimedText;
@@ -10,7 +10,13 @@ import tv.danmaku.ijk.media.player.IjkTimedText;
 
 public interface IVideoView {
 
+    void openVideo();
+
     void onCreatePlayer(IMediaPlayer mp);
+
+    void onPausePlayer(IMediaPlayer mp);
+
+    void onStartPlayer(IMediaPlayer mp);
 
     void onReleasePlayer();
 
