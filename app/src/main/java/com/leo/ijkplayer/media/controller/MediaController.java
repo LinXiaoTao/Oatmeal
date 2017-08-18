@@ -717,6 +717,9 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             return;
         }
 
+        //设置 fitsSystemWindows = true
+        viewGroup.getChildAt(0).setFitsSystemWindows(true);
+
         //清除旧的
         if (mFullScreenView != null) {
             int index = viewGroup.indexOfChild(mFullScreenView);
