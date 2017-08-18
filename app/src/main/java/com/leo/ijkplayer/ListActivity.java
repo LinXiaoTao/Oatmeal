@@ -33,7 +33,6 @@ public class ListActivity extends AppCompatActivity {
         setContentView(R.layout.activity_list);
 
 
-
         mRecyclerView = (RecyclerView) findViewById(R.id.recyclerview);
         mRecyclerView.setLayoutManager(mLinearLayoutManager = new LinearLayoutManager(this));
         mRecyclerView.setAdapter(new Adapter());
@@ -69,9 +68,8 @@ public class ListActivity extends AppCompatActivity {
     }
 
 
-
     /** 自动播放 */
-    private void autoPlay(){
+    private void autoPlay() {
         int firstVisibleItem = mLinearLayoutManager.findFirstVisibleItemPosition();
         int lastVisibleItem = mLinearLayoutManager.findLastVisibleItemPosition();
         int position = (firstVisibleItem + lastVisibleItem) / 2;
@@ -127,10 +125,17 @@ public class ListActivity extends AppCompatActivity {
         }
 
         @Override
-        public void onBindViewHolder(ViewHolder holder, int position) {
+        public void onBindViewHolder(final ViewHolder holder, int position) {
             holder.video.setVideoPath(VIDEO_URL);
             holder.video.setPlayPosition(position);
             holder.controller.setPlayPosition(position);
+            holder.controller.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    holder.controller.toggleFullScreenView();
+                }
+            });
+
         }
 
         @Override

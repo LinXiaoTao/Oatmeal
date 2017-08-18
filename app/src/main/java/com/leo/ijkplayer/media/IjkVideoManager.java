@@ -286,7 +286,6 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
 
         if (stateChangeListener != null) {
             mStateChangeListener = new WeakReference<>(stateChangeListener);
-            stateChangeListener.notifyPlayState(mCurrentState);
         }
 
         return this;
@@ -481,8 +480,8 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
         });
     }
 
-    public void refreshRenderView(){
-        if (mMediaPlayer != null){
+    public void refreshRenderView() {
+        if (mMediaPlayer != null) {
             mMainThreadHandler.post(new Runnable() {
                 @Override
                 public void run() {
@@ -491,6 +490,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
                         videoView.onCreatePlayer(mMediaPlayer);
                         videoView.onPrepared(mMediaPlayer);
                     }
+                    notifyStateChange();
                 }
             });
         }
