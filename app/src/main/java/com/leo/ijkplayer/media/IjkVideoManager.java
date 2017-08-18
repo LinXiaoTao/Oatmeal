@@ -1,5 +1,6 @@
 package com.leo.ijkplayer.media;
 
+import android.content.Context;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
@@ -13,8 +14,11 @@ import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.util.Log;
 
+import com.danikula.videocache.CacheListener;
+import com.danikula.videocache.HttpProxyCacheServer;
 import com.leo.ijkplayer.media.datasource.FileMediaDataSource;
 import com.leo.ijkplayer.media.render.IRenderView;
+import com.leo.ijkplayer.media.util.StorageUtils;
 import com.leo.ijkplayer.media.videoview.IVideoView;
 
 import java.io.File;
@@ -38,14 +42,17 @@ import tv.danmaku.ijk.media.player.misc.IMediaDataSource;
 
 public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, IMediaPlayer.OnCompletionListener
         , IMediaPlayer.OnBufferingUpdateListener, IMediaPlayer.OnSeekCompleteListener, IMediaPlayer.OnErrorListener
-        , IMediaPlayer.OnInfoListener, IMediaPlayer.OnVideoSizeChangedListener, IMediaPlayer.OnTimedTextListener {
+        , IMediaPlayer.OnInfoListener, IMediaPlayer.OnVideoSizeChangedListener, IMediaPlayer.OnTimedTextListener, CacheListener {
 
 
     ///////////////////////////////////////////////////////////////////////////
     // 可配置
     ///////////////////////////////////////////////////////////////////////////
     /** 当前播放的 Uri */
-    private Uri mUri;
+    private Uri mCurrentUri;
+    /** 播放的原始 Uri */
+    private Uri mOriginalUri;
+
     /**
      * video view
      * 因为 manager 是单例，所以在列表中使用时，要注意 videoview 的更新
@@ -147,7 +154,15 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
      * @param settings 播放器配置
      */
     public void setVideoUri(@NonNull Uri uri, Settings settings) {
-        mUri = uri;
+        mOriginalUri = uri;
+        mCurrentUri = uri;
+        if (isCanCache(uri.toString())) {
+            HttpProxyCacheServer httpProxyCacheServer = getCacheServer(settings.getAppContext());
+            mCurrentUri = Uri.parse(httpProxyCacheServer.getProxyUrl(uri.toString()));
+            httpProxyCacheServer.unregisterCacheListener(this);
+            httpProxyCacheServer.registerCacheListener(this, mOriginalUri.toString());
+            debugLog("转换后的 url：" + mCurrentUri.toString());
+        }
         mCurrentState = STATE_PREPARING;
         notifyStateChange();
         Message message = mMediaHandler.obtainMessage(HANDLER_PREPARE);
@@ -372,13 +387,18 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     @Override
     public void onBufferingUpdate(final IMediaPlayer mp, final int percent) {
         debugLog("onBufferingUpdate");
-        mCurrentBufferPercentage = percent;
         mMainThreadHandler.post(new Runnable() {
             @Override
             public void run() {
                 IVideoView iVideoView = getVideoView();
                 if (iVideoView != null) {
-                    iVideoView.onBufferingUpdate(mp, percent);
+                    if (mCurrentBufferPercentage > percent) {
+                        iVideoView.onBufferingUpdate(mp, mCurrentBufferPercentage);
+                    } else {
+                        mCurrentBufferPercentage = percent;
+                        iVideoView.onBufferingUpdate(mp, percent);
+                    }
+
                 }
             }
         });
@@ -503,6 +523,12 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
         }
     }
 
+    @Override
+    public void onCacheAvailable(File cacheFile, String url, int percentsAvailable) {
+        mCurrentBufferPercentage = percentsAvailable;
+        debugLog("当前 Http 代理缓存进度：" + mCurrentBufferPercentage);
+    }
+
     private class MediaHandler extends Handler {
 
         MediaHandler(Looper looper) {
@@ -556,16 +582,16 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
             setMute(mMute);
 
             //data source
-            String scheme = mUri.getScheme();
+            String scheme = mCurrentUri.getScheme();
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
                     settings.getUsingMediaDataSource() &&
                     (TextUtils.isEmpty(scheme) || scheme.equalsIgnoreCase("file"))) {
-                IMediaDataSource dataSource = new FileMediaDataSource(new File(mUri.toString()));
+                IMediaDataSource dataSource = new FileMediaDataSource(new File(mCurrentUri.toString()));
                 mMediaPlayer.setDataSource(dataSource);
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH && settings.getHeaders() != null) {
-                mMediaPlayer.setDataSource(settings.getAppContext(), mUri, settings.getHeaders());
+                mMediaPlayer.setDataSource(settings.getAppContext(), mCurrentUri, settings.getHeaders());
             } else {
-                mMediaPlayer.setDataSource(mUri.toString());
+                mMediaPlayer.setDataSource(mCurrentUri.toString());
             }
 
             //set listener
@@ -604,6 +630,9 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
 
     /** 释放视频管理器 */
     private void releaseVideoManager() {
+        if (mHttpProxyCacheServer != null){
+            mHttpProxyCacheServer.unregisterCacheListener(this);
+        }
         releasePlayer(true);
         setMute(false);
         cancelTimeOutRunnable();
@@ -718,6 +747,39 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
                 mCurrentState != STATE_IDLE &&
                 mCurrentState != STATE_PREPARING);
     }
+
+
+    ///////////////////////////////////////////////////////////////////////////
+    // cache
+    ///////////////////////////////////////////////////////////////////////////
+
+    private HttpProxyCacheServer mHttpProxyCacheServer;
+
+    private HttpProxyCacheServer getCacheServer(Context context) {
+        if (mHttpProxyCacheServer == null) {
+            mHttpProxyCacheServer = createCacheServer(context);
+        }
+
+        return mHttpProxyCacheServer;
+    }
+
+    private HttpProxyCacheServer createCacheServer(Context context) {
+        HttpProxyCacheServer.Builder builder = new HttpProxyCacheServer.Builder(context);
+        File cacheFile = StorageUtils.getCacheDirectory(context);
+        if (cacheFile != null) {
+            builder.cacheDirectory(cacheFile);
+        }
+        return builder.build();
+    }
+
+    /** 当前 url 是否可以缓存 */
+    private boolean isCanCache(String url) {
+        return url.startsWith("http") && !url.contains("127.0.0.1") && !url.contains(".m3u8");
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // logger
+    ///////////////////////////////////////////////////////////////////////////
 
     private void debugLog(String message) {
         Log.d(TAG, message);
