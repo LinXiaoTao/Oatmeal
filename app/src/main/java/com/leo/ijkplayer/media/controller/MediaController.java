@@ -10,8 +10,6 @@ import android.os.Looper;
 import android.os.Message;
 import android.support.annotation.DrawableRes;
 import android.support.annotation.NonNull;
-import android.support.v7.app.ActionBar;
-import android.support.v7.app.AppCompatActivity;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -20,7 +18,6 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
-import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -136,6 +133,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private View mFullScreenView;
     /** 是否延迟启动 */
     private boolean mDelayStart;
+    /** 是否隐藏了 actionbar/toolbar */
+    private boolean mHideActionBar;
 
 
     private static final String NOT_READY_INFO = "视频还没准备好呢";
@@ -308,7 +307,6 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
 
         if (!mShowing) {
-            setProgress();
             mShowing = true;
         }
 
@@ -346,6 +344,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         } else {
             mShowLoading = false;
         }
+        mShowPlay = false;
         mMainHandler.sendEmptyMessage(HANDLE_LOADING);
 
         switch (state) {
@@ -361,10 +360,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 mMainHandler.sendEmptyMessage(UPDATE_THUMB);
                 break;
             case IjkVideoManager.STATE_PREPARED://准备好
-
                 break;
             case IjkVideoManager.STATE_PLAYING://播放中
-                mShowPlay = false;
                 mBtnPlay.play();
                 show();
                 mMainHandler.sendEmptyMessage(UPDATE_THUMB);
@@ -514,7 +511,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             mBtnPlay.setVisibility(VISIBLE);
         }
         if (mBottomProgressbar != null) {
-            mBottomProgressbar.setVisibility(GONE);
+            mBottomProgressbar.setVisibility(INVISIBLE);
         }
 
     }
@@ -522,15 +519,15 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     /** 隐藏布局 */
     private void hideLayout() {
         if (mLayoutBottom != null) {
-            mLayoutBottom.setVisibility(GONE);
+            mLayoutBottom.setVisibility(INVISIBLE);
         }
 
         if (mBtnPlay != null) {
-            mBtnPlay.setVisibility(mShowPlay ? VISIBLE : GONE);
+            mBtnPlay.setVisibility(mShowPlay ? VISIBLE : INVISIBLE);
         }
 
         if (mBottomProgressbar != null) {
-            mBottomProgressbar.setVisibility(mShowBottomProgress ? VISIBLE : GONE);
+            mBottomProgressbar.setVisibility(mShowBottomProgress ? VISIBLE : INVISIBLE);
         }
     }
 
@@ -664,9 +661,9 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         mTextTotal = (TextView) mediaView.findViewById(R.id.total);
         mBtnFullscreen = (ImageView) mediaView.findViewById(R.id.fullscreen);
         mBottomProgressbar = (ProgressBar) mediaView.findViewById(R.id.bottom_progressbar);
-        mBottomProgressbar.setVisibility(mShowBottomProgress ? VISIBLE : GONE);
+        mBottomProgressbar.setVisibility(mShowBottomProgress ? VISIBLE : INVISIBLE);
         mImgThumb = (ImageView) mediaView.findViewById(R.id.thumb);
-        mImgThumb.setVisibility(mShowThumb ? VISIBLE : GONE);
+        mImgThumb.setVisibility(mShowThumb ? VISIBLE : INVISIBLE);
         if (mShowThumb && mThumbRes > 0) {
             mImgThumb.setImageResource(mThumbRes);
         }
@@ -729,18 +726,30 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             mFullScreenView = null;
         }
 
-        mSystemUiVisibility = mContext.getWindow().getDecorView().getSystemUiVisibility();
+        mSystemUiVisibility = mContext.getWindow().getDecorView().getSystemUiVisibility()
+                | SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
 
-        fullScreen();
+        int systemUiVisibility = SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | SYSTEM_UI_FLAG_FULLSCREEN
+                | SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+
+        mContext.getWindow().getDecorView().setSystemUiVisibility(systemUiVisibility);
+
 
         IjkVideoManager.getInstance().clearVideoView();
         IjkVideoManager.getInstance().clearStateChangeListener();
 
         mFullScreenView = new IjkVideoView(mContext);
         final IjkVideoView ijkVideoView = (IjkVideoView) mFullScreenView;
-        if (mVideoView.getPauseBitmap() != null) {
-            ijkVideoView.setPauseBitmap(Bitmap.createBitmap(mVideoView.getPauseBitmap()));
+        if (!IjkVideoManager.getInstance().isPlaying()) {
+            mVideoView.initPauseCover();
+            if (mVideoView.getPauseBitmap() != null) {
+                ijkVideoView.setPauseBitmap(Bitmap.createBitmap(mVideoView.getPauseBitmap()));
+            }
         }
+
         ijkVideoView.setSettings(mVideoView.getSettings());
         final MediaController mediaController = new MediaController(mContext);
         //全屏播放器可以处理返回按键
@@ -754,8 +763,11 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                     if (mediaController.isFullscreen()) {
                         mediaController.toggleScreenOrientation();
                     } else {
-                        if (ijkVideoView.getPauseBitmap() != null) {
-                            mVideoView.setPauseBitmap(Bitmap.createBitmap(ijkVideoView.getPauseBitmap()));
+                        if (!IjkVideoManager.getInstance().isPlaying()) {
+                            ijkVideoView.initPauseCover();
+                            if (ijkVideoView.getPauseBitmap() != null) {
+                                mVideoView.setPauseBitmap(Bitmap.createBitmap(ijkVideoView.getPauseBitmap()));
+                            }
                         }
                         removeFullScreenView();
                     }
@@ -805,7 +817,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         if (mImgThumb != null) {
 
             boolean needShow = !isActive() && mShowThumb && !mShowLoading;
-            mImgThumb.setVisibility(needShow ? VISIBLE : GONE);
+            mImgThumb.setVisibility(needShow ? VISIBLE : INVISIBLE);
             if (needShow && mThumbRes > 0) {
                 mImgThumb.setImageResource(mThumbRes);
             }
@@ -818,14 +830,14 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         if (mLoadingView != null) {
             if (mShowLoading) {
                 if (mImgThumb != null) {
-                    mImgThumb.setVisibility(GONE);
+                    mImgThumb.setVisibility(INVISIBLE);
                 }
                 mLoadingView.setVisibility(VISIBLE);
                 mLoadingView.start();
                 mShowPlay = false;
                 hideLayout();
             } else {
-                mLoadingView.setVisibility(GONE);
+                mLoadingView.setVisibility(INVISIBLE);
                 mLoadingView.reset();
                 showLayout();
             }
@@ -899,21 +911,4 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         Log.e(TAG, info);
     }
 
-    private void fullScreen() {
-
-        //隐藏 ActionBar/Toolbar
-        if (mContext instanceof AppCompatActivity) {
-            AppCompatActivity appCompatActivity = AppCompatActivity.class.cast(mContext);
-            if (appCompatActivity.getSupportActionBar() != null) {
-                ActionBar actionBar = appCompatActivity.getSupportActionBar();
-//                actionBar.setShowHideAnimationEnabled(false);
-                actionBar.hide();
-            }
-        }
-
-        //fullscreen
-        mContext.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN
-                , WindowManager.LayoutParams.FLAG_FULLSCREEN);
-
-    }
 }

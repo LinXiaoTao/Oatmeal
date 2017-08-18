@@ -18,6 +18,8 @@ public interface IVideoView {
 
     void setPauseBitmap(Bitmap pauseBitmap);
 
+    void initPauseCover();
+
     void openVideo();
 
     void setSettings(Settings settings);

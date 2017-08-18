@@ -517,10 +517,23 @@ public class IjkVideoView extends FrameLayout implements IVideoView {
         mPauseBitmap = pauseBitmap;
     }
 
+    /** 初始化暂停时的封面 */
+    @Override
+    public void initPauseCover() {
+        if (mRenderView == null) {
+            return;
+        }
+        if (mPauseBitmap != null && !mPauseBitmap.isRecycled()) {
+            mPauseBitmap.recycle();
+        }
+        mPauseBitmap = null;
+        mPauseBitmap = mRenderView.getBitmap();
+    }
+
     /** 更新暂停时的封面 */
     private void updatePauseCover() {
         if (mPauseBitmap == null || mPauseBitmap.isRecycled()) {
-            initCover();
+            initPauseCover();
         }
     }
 
@@ -551,17 +564,7 @@ public class IjkVideoView extends FrameLayout implements IVideoView {
         }
     }
 
-    /** 初始化暂停时的封面 */
-    private void initCover() {
-        if (mRenderView == null) {
-            return;
-        }
-        if (mPauseBitmap != null && !mPauseBitmap.isRecycled()) {
-            mPauseBitmap.recycle();
-        }
-        mPauseBitmap = null;
-        mPauseBitmap = mRenderView.getBitmap();
-    }
+
 
     ///////////////////////////////////////////////////////////////////////////
     // util

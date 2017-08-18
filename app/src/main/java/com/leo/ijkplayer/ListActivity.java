@@ -10,8 +10,8 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import com.leo.ijkplayer.media.IjkVideoManager;
-import com.leo.ijkplayer.media.videoview.IjkVideoView;
 import com.leo.ijkplayer.media.controller.MediaController;
+import com.leo.ijkplayer.media.videoview.IjkVideoView;
 
 /**
  * Created on 2017/8/15 下午5:08.
@@ -31,6 +31,7 @@ public class ListActivity extends AppCompatActivity {
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_list);
+
 
 
         mRecyclerView = (RecyclerView) findViewById(R.id.recyclerview);
@@ -66,6 +67,8 @@ public class ListActivity extends AppCompatActivity {
         });
 
     }
+
+
 
     /** 自动播放 */
     private void autoPlay(){
