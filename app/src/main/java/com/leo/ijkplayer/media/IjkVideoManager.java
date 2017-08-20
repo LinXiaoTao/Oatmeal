@@ -23,6 +23,7 @@ import com.leo.ijkplayer.media.videoview.IVideoView;
 
 import java.io.File;
 import java.lang.ref.WeakReference;
+import java.net.URI;
 
 import tv.danmaku.ijk.media.exo.IjkExoMediaPlayer;
 import tv.danmaku.ijk.media.player.AndroidMediaPlayer;
@@ -105,6 +106,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     // 内部使用变量
     ///////////////////////////////////////////////////////////////////////////
     private static IjkVideoManager sInstance;
+    private Context mContext;
     private MediaHandler mMediaHandler;
     private Handler mMainThreadHandler;
     private IMediaPlayer mMediaPlayer;
@@ -154,6 +156,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
      * @param settings 播放器配置
      */
     public void setVideoUri(@NonNull Uri uri, Settings settings) {
+        mContext = settings.getAppContext();
         mOriginalUri = uri;
         mCurrentUri = uri;
         if (isCanCache(uri.toString())) {
@@ -432,6 +435,14 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
                 if (iVideoView != null) {
                     iVideoView.onError(mp, what, extra);
                 }
+                //删除缓存文件
+                if (mCurrentUri != null && mOriginalUri != null && mCurrentUri != mOriginalUri) {
+                    //使用了缓存
+                    if (mCurrentUri.getScheme().equals("file")){
+                        StorageUtils.delFile(new File(URI.create(mCurrentUri.toString())));
+                    }
+                    StorageUtils.delSpecifyUrlCache(mContext,mCacheDir,mOriginalUri.toString());
+                }
             }
         });
         return true;
@@ -630,10 +641,11 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
 
     /** 释放视频管理器 */
     private void releaseVideoManager() {
-        if (mHttpProxyCacheServer != null){
+        if (mHttpProxyCacheServer != null) {
             mHttpProxyCacheServer.unregisterCacheListener(this);
         }
         releasePlayer(true);
+        mMute = false;
         setMute(false);
         cancelTimeOutRunnable();
         mCurrentState = STATE_IDLE;
@@ -754,6 +766,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     ///////////////////////////////////////////////////////////////////////////
 
     private HttpProxyCacheServer mHttpProxyCacheServer;
+    private File mCacheDir;
 
     private HttpProxyCacheServer getCacheServer(Context context) {
         if (mHttpProxyCacheServer == null) {
@@ -765,9 +778,9 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
 
     private HttpProxyCacheServer createCacheServer(Context context) {
         HttpProxyCacheServer.Builder builder = new HttpProxyCacheServer.Builder(context);
-        File cacheFile = StorageUtils.getCacheDirectory(context);
-        if (cacheFile != null) {
-            builder.cacheDirectory(cacheFile);
+        mCacheDir = StorageUtils.getCacheDirectory(context);
+        if (mCacheDir != null) {
+            builder.cacheDirectory(mCacheDir);
         }
         return builder.build();
     }

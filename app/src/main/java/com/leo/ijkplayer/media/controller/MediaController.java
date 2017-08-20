@@ -2,6 +2,7 @@ package com.leo.ijkplayer.media.controller;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -11,6 +12,7 @@ import android.os.Message;
 import android.support.annotation.DrawableRes;
 import android.support.annotation.NonNull;
 import android.support.v4.view.GestureDetectorCompat;
+import android.support.v7.app.AlertDialog;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.GestureDetector;
@@ -68,6 +70,10 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     /** 播放器点击事件 */
     private int mFullScreenMode = FULLSCREEN_ORIENTATION;
     private OnFullScreenChangeListener mFullScreenChangeListener;
+    /** 是否静音 */
+    private boolean mMute;
+    /** 全屏是否静音 */
+    private boolean mFullScreenMute;
 
     ///////////////////////////////////////////////////////////////////////////
     // 常量区
@@ -131,10 +137,9 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private View mFullScreenView;
     /** 是否延迟启动 */
     private boolean mDelayStart;
-    /** 是否隐藏了 actionbar/toolbar */
-    private boolean mHideActionBar;
     private GestureDetectorCompat mGestureDetectorCompat;
     private int mCurrentState;
+    private AlertDialog mInfoDialog;
 
 
     private static final String NOT_READY_INFO = "视频还没准备好呢";
@@ -208,6 +213,16 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         return mFullscreen;
     }
 
+    public MediaController setMute(boolean mute) {
+        mMute = mute;
+        IjkVideoManager.getInstance().setMute(mute);
+        return this;
+    }
+
+    public MediaController setFullScreenMute(boolean fullScreenMute) {
+        mFullScreenMute = fullScreenMute;
+        return this;
+    }
 
     @Override
     protected void onDetachedFromWindow() {
@@ -283,6 +298,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     public void setEnabled(boolean enabled) {
         mEnabled = enabled;
         if (mEnabled) {
+            //当 player prepared
+            IjkVideoManager.getInstance().setMute(mMute);
             IjkVideoManager.getInstance().setStateChangeListener(this);
             debug("当前为启动状态");
             if (mDelayStart) {
@@ -346,19 +363,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
         switch (state) {
             case IjkVideoManager.STATE_IDLE://闲置中
-                mEnabled = false;
-                mShowing = false;
-                mShowPlay = true;
-                if (mBtnPlay != null) {
-                    mBtnPlay.setVisibility(VISIBLE);
-                    mBtnPlay.pause();
-                }
-                if (mLoadingView != null) {
-                    mLoadingView.reset();
-                    mLoadingView.setVisibility(GONE);
-                }
-                hide();
-                updateThumb();
+                release();
                 break;
             case IjkVideoManager.STATE_BUFFERING_START://开始缓冲
             case IjkVideoManager.STATE_PREPARING://准备中
@@ -376,14 +381,14 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             case IjkVideoManager.STATE_PREPARED://准备好
                 if (mLoadingView != null) {
                     mLoadingView.reset();
-                    mLoadingView.setVisibility(INVISIBLE);
+                    mLoadingView.setVisibility(GONE);
                 }
                 show();
                 break;
             case IjkVideoManager.STATE_PLAYING://播放中
                 if (mLoadingView != null) {
                     mLoadingView.reset();
-                    mLoadingView.setVisibility(INVISIBLE);
+                    mLoadingView.setVisibility(GONE);
                 }
                 if (mBtnPlay != null) {
                     mBtnPlay.setVisibility(VISIBLE);
@@ -392,6 +397,10 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 show();
                 break;
             case IjkVideoManager.STATE_PAUSED://暂停中
+                if (mLoadingView != null) {
+                    mLoadingView.reset();
+                    mLoadingView.setVisibility(GONE);
+                }
                 if (mBtnPlay != null) {
                     mBtnPlay.setVisibility(VISIBLE);
                     mBtnPlay.pause();
@@ -399,6 +408,23 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 show();
                 break;
             case IjkVideoManager.STATE_PLAYBACK_COMPLETED://播放完成
+                if (mBtnPlay != null) {
+                    mBtnPlay.pause();
+                }
+                show();
+                break;
+            case IjkVideoManager.STATE_ERROR://错误
+                if (mLoadingView != null) {
+                    mLoadingView.reset();
+                    mLoadingView.setVisibility(GONE);
+                }
+                mShowPlay = true;
+                if (mBtnPlay != null) {
+                    mBtnPlay.pause();
+                    mBtnPlay.setVisibility(VISIBLE);
+                }
+                show();
+                showInfo("播放出错啦");
                 break;
         }
     }
@@ -428,6 +454,29 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         }
 
         show();
+    }
+
+    private void release() {
+        mEnabled = false;
+        mShowing = false;
+        mShowPlay = true;
+        if (mBtnPlay != null) {
+            mBtnPlay.setVisibility(VISIBLE);
+            mBtnPlay.pause();
+        }
+        if (mLoadingView != null) {
+            mLoadingView.reset();
+            mLoadingView.setVisibility(GONE);
+        }
+        if (mInfoDialog != null) {
+            mInfoDialog.dismiss();
+            mInfoDialog = null;
+        }
+        hide();
+        updateThumb();
+        if (mToast != null) {
+            mToast.cancel();
+        }
     }
 
     public void toggleScreenOrientation() {
@@ -479,9 +528,9 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
             @Override
             public boolean onDoubleTap(MotionEvent e) {
-                if (IjkVideoManager.getInstance().isPlaying()){
+                if (IjkVideoManager.getInstance().isPlaying()) {
                     pauseMedia();
-                }else {
+                } else {
                     playMedia();
                 }
                 return true;
@@ -564,7 +613,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             mLayoutBottom.setVisibility(VISIBLE);
         }
 
-        if (mBtnPlay != null && mShowControllLayout) {
+        if (mBtnPlay != null && mShowControllLayout && (mLoadingView == null || mLoadingView.getVisibility() != VISIBLE)) {
             mBtnPlay.setVisibility(VISIBLE);
         }
         if (mBottomProgressbar != null) {
@@ -751,7 +800,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
     private void handleControllLayout() {
         if (mShowControllLayout) {
-            boolean show = mEnabled && mShowing;
+            boolean show = mEnabled && mShowing && (mLoadingView == null || mLoadingView.getVisibility() != VISIBLE);
             if (show) {
                 mLayoutBottom.setVisibility(VISIBLE);
                 mBtnPlay.setVisibility(VISIBLE);
@@ -850,6 +899,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 return false;
             }
         });
+        mediaController.setMute(mFullScreenMute);
         mediaController.setShowThumb(false);
         ijkVideoView.setMediaController(mediaController);
         ijkVideoView.setVideoPath("http://baobab.wdjcdn.com/14564977406580.mp4");
@@ -879,6 +929,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         }
         if (mVideoView != null) {
             //恢复
+            IjkVideoManager.getInstance().setMute(mMute);
             IjkVideoManager.getInstance().setVideoView(mVideoView);
             IjkVideoManager.getInstance().setStateChangeListener(this);
             IjkVideoManager.getInstance().refreshRenderView();
@@ -904,6 +955,25 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         return mPlayPosition == IjkVideoManager.getInstance().getPlayPosition();
     }
 
+    private void showInfoDialog(String message, DialogInterface.OnClickListener onClickListener) {
+        if (mInfoDialog != null) {
+            mInfoDialog.dismiss();
+            mInfoDialog = null;
+        }
+
+        mInfoDialog = new AlertDialog.Builder(mContext)
+                .setCancelable(true)
+                .setTitle("播放器状态")
+                .setMessage(message)
+                .setPositiveButton("确定", onClickListener)
+                .setNegativeButton("取消", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        dialog.dismiss();
+                    }
+                })
+                .show();
+    }
 
     public interface OnFullScreenChangeListener {
 
@@ -917,9 +987,6 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private Toast mToast;
 
     private void showInfo(@NonNull String info) {
-        if (mToast != null) {
-            mToast.cancel();
-        }
         if (mToast == null) {
             mToast = Toast.makeText(getContext(), info, Toast.LENGTH_SHORT);
         } else {

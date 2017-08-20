@@ -43,14 +43,14 @@ public class StorageUtils {
     }
 
     /**
-     * 删除指定的 url 缓存目录
+     * 删除指定的 url 缓存中文件
      *
      * @param context
      * @param cacheDir
      * @param url
      */
     public static void delSpecifyUrlCache(Context context, File cacheDir, String url) {
-        String cacheFileName = FILE_NAME_GENERATOR.generate(url);
+        String cacheFileName = FILE_NAME_GENERATOR.generate(url) + ".download";
         File specifyCacheDir = new File(cacheDir, cacheFileName);
         delFile(specifyCacheDir);
     }

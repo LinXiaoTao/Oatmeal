@@ -187,10 +187,6 @@ public class IjkVideoView extends FrameLayout implements IVideoView {
     @Override
     public void openVideo() {
 
-        //兼容列表，防止重复设置播放地址
-        if (mPlayPosition == IjkVideoManager.getInstance().getPlayPosition()) {
-            return;
-        }
 
         AudioManager am = (AudioManager) mAppContext.getSystemService(Context.AUDIO_SERVICE);
         am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);

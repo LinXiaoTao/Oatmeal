@@ -1,5 +1,6 @@
 package com.leo.ijkplayer;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
@@ -8,6 +9,7 @@ import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 
 import com.leo.ijkplayer.media.IjkVideoManager;
 import com.leo.ijkplayer.media.controller.MediaController;
@@ -21,6 +23,7 @@ import com.leo.ijkplayer.media.videoview.IjkVideoView;
 public class ListActivity extends AppCompatActivity {
 
     private RecyclerView mRecyclerView;
+    private Button mBtnDetail;
     private LinearLayoutManager mLinearLayoutManager;
     /** 上一次播放下标 */
     private int mPrePlayPosition = -1;
@@ -32,6 +35,14 @@ public class ListActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_list);
 
+        mBtnDetail = (Button) findViewById(R.id.btn_detail);
+        mBtnDetail.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(ListActivity.this,MainActivity.class);
+                startActivity(intent);
+            }
+        });
 
         mRecyclerView = (RecyclerView) findViewById(R.id.recyclerview);
         mRecyclerView.setLayoutManager(mLinearLayoutManager = new LinearLayoutManager(this));
@@ -104,11 +115,6 @@ public class ListActivity extends AppCompatActivity {
         IjkVideoManager.getInstance().release();
     }
 
-    @Override
-    public void onBackPressed() {
-        super.onBackPressed();
-
-    }
 
     private static class Adapter extends RecyclerView.Adapter<ViewHolder> {
 
@@ -120,6 +126,7 @@ public class ListActivity extends AppCompatActivity {
             viewHolder.controller = new MediaController(parent.getContext());
             viewHolder.controller.setThumbRes(R.drawable.xxx2);
             viewHolder.controller.setFullScreenMode(MediaController.FULLSCREEN_VIEW);
+            viewHolder.controller.setMute(true);
             viewHolder.video.setMediaController(viewHolder.controller);
             return viewHolder;
         }
