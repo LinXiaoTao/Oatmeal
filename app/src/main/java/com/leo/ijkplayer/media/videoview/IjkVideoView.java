@@ -187,7 +187,6 @@ public class IjkVideoView extends FrameLayout implements IVideoView {
     @Override
     public void openVideo() {
 
-
         AudioManager am = (AudioManager) mAppContext.getSystemService(Context.AUDIO_SERVICE);
         am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
 

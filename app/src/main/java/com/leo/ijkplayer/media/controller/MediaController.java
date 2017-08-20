@@ -58,7 +58,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     /** 是否显示底部进度条 */
     private boolean mShowBottomProgress = true;
     /** 是否显示控制布局 */
-    private boolean mShowControllLayout = true;
+    private boolean mShowBottomLayout = true;
     /** 是否显示封面图 */
     private boolean mShowThumb = true;
     @DrawableRes
@@ -74,6 +74,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private boolean mMute;
     /** 全屏是否静音 */
     private boolean mFullScreenMute;
+    /** 是否准备好就播放 */
+    private boolean mPreparedPlay;
 
     ///////////////////////////////////////////////////////////////////////////
     // 常量区
@@ -135,8 +137,6 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private int mSystemUiVisibility = -1;
     /** 全屏显示的控件 */
     private View mFullScreenView;
-    /** 是否延迟启动 */
-    private boolean mDelayStart;
     private GestureDetectorCompat mGestureDetectorCompat;
     private int mCurrentState;
     private AlertDialog mInfoDialog;
@@ -173,8 +173,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         return this;
     }
 
-    public MediaController setShowControllLayout(boolean showControllLayout) {
-        mShowControllLayout = showControllLayout;
+    public MediaController setShowBottomLayout(boolean showBottomLayout) {
+        mShowBottomLayout = showBottomLayout;
         return this;
     }
 
@@ -222,6 +222,16 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     public MediaController setFullScreenMute(boolean fullScreenMute) {
         mFullScreenMute = fullScreenMute;
         return this;
+    }
+
+    public MediaController setPreparedPlay(boolean preparedPlay) {
+        mPreparedPlay = preparedPlay;
+        return this;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return mEnabled;
     }
 
     @Override
@@ -302,8 +312,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             IjkVideoManager.getInstance().setMute(mMute);
             IjkVideoManager.getInstance().setStateChangeListener(this);
             debug("当前为启动状态");
-            if (mDelayStart) {
-                mDelayStart = false;
+            if (mPreparedPlay) {
+                mPreparedPlay = false;
                 playMedia();
             }
         }
@@ -460,7 +470,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         mEnabled = false;
         mShowing = false;
         mShowPlay = true;
-        if (mBtnPlay != null) {
+        if (mBtnPlay != null ) {
             mBtnPlay.setVisibility(VISIBLE);
             mBtnPlay.pause();
         }
@@ -609,11 +619,11 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
     /** 显示布局 */
     private void showLayout() {
-        if (mLayoutBottom != null && mShowControllLayout) {
+        if (mLayoutBottom != null && mShowBottomLayout) {
             mLayoutBottom.setVisibility(VISIBLE);
         }
 
-        if (mBtnPlay != null && mShowControllLayout && (mLoadingView == null || mLoadingView.getVisibility() != VISIBLE)) {
+        if (mBtnPlay != null && (mLoadingView == null || mLoadingView.getVisibility() != VISIBLE)) {
             mBtnPlay.setVisibility(VISIBLE);
         }
         if (mBottomProgressbar != null) {
@@ -763,6 +773,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         mLoadingView = (ENDownloadView) mediaView.findViewById(R.id.loading);
         mBtnPlay = (ENPlayView) mediaView.findViewById(R.id.play);
         mLayoutBottom = (LinearLayout) mediaView.findViewById(R.id.layout_bottom);
+        mLayoutBottom.setVisibility(mShowBottomLayout ? VISIBLE : GONE);
         mTextCurrent = (TextView) mediaView.findViewById(R.id.current);
         mSeekProgress = (SeekBar) mediaView.findViewById(R.id.progress);
         mTextTotal = (TextView) mediaView.findViewById(R.id.total);
@@ -780,16 +791,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         mBtnPlay.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (mEnabled) {
-                    if (IjkVideoManager.getInstance().isPlaying()) {
-                        pauseMedia();
-                    } else {
-                        playMedia();
-                    }
-                } else if (mVideoView != null) {
-                    mDelayStart = true;
-                    mVideoView.openVideo();
-                }
+                startPlay();
             }
         });
 
@@ -798,16 +800,28 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         handleControllLayout();
     }
 
+    public MediaController startPlay() {
+        if (mEnabled) {
+            if (IjkVideoManager.getInstance().isPlaying()) {
+                pauseMedia();
+            } else {
+                playMedia();
+            }
+        } else if (mVideoView != null) {
+            mPreparedPlay = true;
+            mVideoView.openVideo();
+        }
+        return this;
+    }
+
     private void handleControllLayout() {
-        if (mShowControllLayout) {
-            boolean show = mEnabled && mShowing && (mLoadingView == null || mLoadingView.getVisibility() != VISIBLE);
+        if (mShowBottomLayout) {
+            boolean show = mEnabled && mShowing;
             if (show) {
                 mLayoutBottom.setVisibility(VISIBLE);
-                mBtnPlay.setVisibility(VISIBLE);
             }
         } else {
             mLayoutBottom.setVisibility(GONE);
-            mBtnPlay.setVisibility(GONE);
         }
     }
 
@@ -831,6 +845,10 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     };
 
     private void addFullScreenView() {
+
+        if (!mEnabled) {
+            return;
+        }
 
         ViewGroup viewGroup = (ViewGroup) mContext.findViewById(Window.ID_ANDROID_CONTENT);
         if (viewGroup == null) {
@@ -875,6 +893,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
         ijkVideoView.setSettings(mVideoView.getSettings());
         final MediaController mediaController = new MediaController(mContext);
+        mediaController.setShowBottomLayout(mShowBottomLayout);
         //全屏播放器可以处理返回按键
         mediaController.setFocusableInTouchMode(true);
         mediaController.requestFocus();
@@ -917,6 +936,9 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
     private void removeFullScreenView() {
 
+        if (!mEnabled) {
+            return;
+        }
 
         if (mFullScreenView != null) {
             ViewGroup viewGroup = (ViewGroup) mFullScreenView.getParent();
