@@ -122,6 +122,8 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     private int mSeekWhenPrepared;
     /** 当前缓冲百分比 */
     private int mCurrentBufferPercentage;
+    /** 当前是否为缓存文件 */
+    private boolean mIsCache;
 
 
     public static IjkVideoManager getInstance() {
@@ -149,6 +151,10 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
         return mPlayPosition;
     }
 
+    public boolean isCache() {
+        return mIsCache;
+    }
+
     /**
      * 设置播放 Uri
      *
@@ -165,6 +171,9 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
             httpProxyCacheServer.unregisterCacheListener(this);
             httpProxyCacheServer.registerCacheListener(this, mOriginalUri.toString());
             debugLog("转换后的 url：" + mCurrentUri.toString());
+            if (mCurrentUri.getScheme().equals("file")) {
+                mIsCache = true;
+            }
         }
         mCurrentState = STATE_PREPARING;
         notifyStateChange();
@@ -438,10 +447,10 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
                 //删除缓存文件
                 if (mCurrentUri != null && mOriginalUri != null && mCurrentUri != mOriginalUri) {
                     //使用了缓存
-                    if (mCurrentUri.getScheme().equals("file")){
+                    if (mCurrentUri.getScheme().equals("file")) {
                         StorageUtils.delFile(new File(URI.create(mCurrentUri.toString())));
                     }
-                    StorageUtils.delSpecifyUrlCache(mContext,mCacheDir,mOriginalUri.toString());
+                    StorageUtils.delSpecifyUrlCache(mContext, mCacheDir, mOriginalUri.toString());
                 }
             }
         });

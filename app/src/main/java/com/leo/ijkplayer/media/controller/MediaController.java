@@ -32,6 +32,7 @@ import android.widget.Toast;
 
 import com.leo.ijkplayer.R;
 import com.leo.ijkplayer.media.IjkVideoManager;
+import com.leo.ijkplayer.media.util.NetworkUtils;
 import com.leo.ijkplayer.media.util.OrientationUtils;
 import com.leo.ijkplayer.media.videoview.IVideoView;
 import com.leo.ijkplayer.media.videoview.IjkVideoView;
@@ -76,6 +77,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private boolean mFullScreenMute;
     /** 是否准备好就播放 */
     private boolean mPreparedPlay;
+    /** 是否检查当前是否为 Wifi */
+    private boolean mCheckWifi = true;
 
     ///////////////////////////////////////////////////////////////////////////
     // 常量区
@@ -229,9 +232,9 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         return this;
     }
 
-    @Override
-    public boolean isEnabled() {
-        return mEnabled;
+    public MediaController setCheckWifi(boolean checkWifi) {
+        mCheckWifi = checkWifi;
+        return this;
     }
 
     @Override
@@ -470,7 +473,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         mEnabled = false;
         mShowing = false;
         mShowPlay = true;
-        if (mBtnPlay != null ) {
+        if (mBtnPlay != null) {
             mBtnPlay.setVisibility(VISIBLE);
             mBtnPlay.pause();
         }
@@ -658,6 +661,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
     /** 开始播放视频 */
     private void playMedia() {
+
         if (!IjkVideoManager.getInstance().isPlaying()) {
             IjkVideoManager.getInstance().start();
             debug("开始播放视频");
@@ -791,6 +795,24 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         mBtnPlay.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
+                //检查网络
+                if (mCheckWifi && !NetworkUtils.isWifiConnected(mContext) && !IjkVideoManager.getInstance().isPlaying()) {
+                    mShowPlay = true;
+                    if (mBtnPlay != null) {
+                        mBtnPlay.setVisibility(VISIBLE);
+                    }
+                    showInfoDialog("当前为非 Wift 环境，是否继续播放视频？", new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            mShowPlay = false;
+                            if (mBtnPlay != null) {
+                                mBtnPlay.setVisibility(GONE);
+                            }
+                            startPlay();
+                        }
+                    });
+                    return;
+                }
                 startPlay();
             }
         });
@@ -800,7 +822,9 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         handleControllLayout();
     }
 
-    public MediaController startPlay() {
+    private MediaController startPlay() {
+
+
         if (mEnabled) {
             if (IjkVideoManager.getInstance().isPlaying()) {
                 pauseMedia();
@@ -985,7 +1009,6 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
         mInfoDialog = new AlertDialog.Builder(mContext)
                 .setCancelable(true)
-                .setTitle("播放器状态")
                 .setMessage(message)
                 .setPositiveButton("确定", onClickListener)
                 .setNegativeButton("取消", new DialogInterface.OnClickListener() {

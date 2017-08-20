@@ -13,6 +13,7 @@ import android.widget.Button;
 
 import com.leo.ijkplayer.media.IjkVideoManager;
 import com.leo.ijkplayer.media.controller.MediaController;
+import com.leo.ijkplayer.media.util.NetworkUtils;
 import com.leo.ijkplayer.media.videoview.IjkVideoView;
 
 /**
@@ -39,7 +40,7 @@ public class ListActivity extends AppCompatActivity {
         mBtnDetail.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Intent intent = new Intent(ListActivity.this,MainActivity.class);
+                Intent intent = new Intent(ListActivity.this, MainActivity.class);
                 startActivity(intent);
             }
         });
@@ -81,6 +82,9 @@ public class ListActivity extends AppCompatActivity {
 
     /** 自动播放 */
     private void autoPlay() {
+        if (!NetworkUtils.isWifiConnected(this)) {
+            return;
+        }
         int firstVisibleItem = mLinearLayoutManager.findFirstVisibleItemPosition();
         int lastVisibleItem = mLinearLayoutManager.findLastVisibleItemPosition();
         int position = (firstVisibleItem + lastVisibleItem) / 2;
