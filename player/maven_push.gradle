@@ -1,0 +1,110 @@
+apply plugin: 'maven'
+apply plugin: 'signing'
+
+def mavenRepositoryUrl
+
+
+if (isReleaseBuild()) {
+    println 'RELEASE BUILD'
+    // 下面的库地址指向的是我们私有仓库的Releases 仓库
+    mavenRepositoryUrl = hasProperty('RELEASE_REPOSITORY_URL') ? RELEASE_REPOSITORY_URL
+            : "http://192.168.1.253:8070/nexus/content/repositories/releases/"
+} else {
+    println 'SNAPSHOTS BUILD'
+    // 下面的库地址指向的是我们私有仓库的snapshots 仓库
+    mavenRepositoryUrl = hasProperty('SNAPSHOT_REPOSITORY_URL') ? SNAPSHOT_REPOSITORY_URL
+            : "http://192.168.1.253:8070/nexus/content/repositories/snapshots/"
+}
+
+def getRepositoryUsername() {
+    return hasProperty('NEXUS_USERNAME') ? NEXUS_USERNAME : ""
+}
+
+def getRepositoryPassword() {
+    return hasProperty('NEXUS_PASSWORD') ? NEXUS_PASSWORD : ""
+}
+
+def isReleaseBuild() {
+    return !VERSION_NAME.contains("SNAPSHOT");
+}
+
+afterEvaluate { project ->
+    // 我们声明我们要执行的上传到maven的task
+    uploadArchives {
+        repositories {
+            mavenDeployer {
+                beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+                // 我们类比下compile com.squareup.okhttp:okhttp:2.7.0
+                // 这样就类似坐标的方式定位到了制定的库文件
+                pom.artifactId = POM_ARTIFACT_ID
+                pom.groupId = POM_GROUP_ID
+                pom.version = VERSION_NAME
+
+                // 授权验证,这里也就是你登陆搭建的私服服务器时候的用户名\密码
+                repository(url: mavenRepositoryUrl) {
+                    authentication(userName: getRepositoryUsername(), password: getRepositoryPassword())
+                }
+
+                // 这里是配置我们maven库需要的pom.xml文件的各个内容,具体意思我们在主目录gradle.properties中解释
+                pom.project {
+                    name POM_NAME
+                    packaging POM_PACKAGING
+                    description POM_DESCRIPTION
+                    url POM_URL
+
+                    scm {
+                        url POM_SCM_URL
+                        connection POM_SCM_CONNECTION
+                        developerConnection POM_SCM_DEV_CONNECTION
+                    }
+
+                    licenses {
+                        license {
+                            name POM_LICENCE_NAME
+                            url POM_LICENCE_URL
+                            distribution POM_LICENCE_DIST
+                        }
+                    }
+
+                    developers {
+                        developer {
+                            id POM_DEVELOPER_ID
+                            name POM_DEVELOPER_NAME
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 进行数字签名
+    signing {
+        required { isReleaseBuild() && gradle.taskGraph.hasTask("uploadArchives") }
+        sign configurations.archives
+    }
+
+    // type显示指定任务类型或任务, 这里指定要执行Javadoc这个task,这个task在gradle中已经定义
+    task androidJavadocs(type: Javadoc) {
+        // 设置源码所在的位置
+        source = android.sourceSets.main.java.sourceFiles
+    }
+
+    // 生成javadoc.jar
+    task androidJavadocsJar(type: Jar) {
+        // 指定文档名称
+        classifier = 'javadoc'
+        from androidJavadocs.destinationDir
+    }
+
+    // 生成sources.jar
+    task androidSourcesJar(type: Jar) {
+        classifier = 'sources'
+        from android.sourceSets.main.java.sourceFiles
+    }
+
+    // 产生相关配置文件的任务
+    artifacts {
+        archives androidSourcesJar
+        archives androidJavadocsJar
+    }
+}
