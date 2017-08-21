@@ -3,9 +3,9 @@ package com.leo.ijkplayer;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 
-import com.leo.ijkplayer.media.IjkVideoManager;
-import com.leo.ijkplayer.media.videoview.IjkVideoView;
-import com.leo.ijkplayer.media.controller.MediaController;
+import com.leo.player.media.IjkVideoManager;
+import com.leo.player.media.videoview.IjkVideoView;
+import com.leo.player.media.controller.MediaController;
 
 public class MainActivity extends AppCompatActivity {
 

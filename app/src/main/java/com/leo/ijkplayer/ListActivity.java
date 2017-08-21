@@ -11,10 +11,11 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 
-import com.leo.ijkplayer.media.IjkVideoManager;
-import com.leo.ijkplayer.media.controller.MediaController;
-import com.leo.ijkplayer.media.util.NetworkUtils;
-import com.leo.ijkplayer.media.videoview.IjkVideoView;
+import com.leo.player.media.IjkVideoManager;
+import com.leo.player.media.controller.MediaController;
+import com.leo.player.media.util.NetworkUtils;
+import com.leo.player.media.videoview.IjkVideoView;
+
 
 /**
  * Created on 2017/8/15 下午5:08.
