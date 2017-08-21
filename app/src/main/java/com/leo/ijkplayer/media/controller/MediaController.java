@@ -1,11 +1,13 @@
 package com.leo.ijkplayer.media.controller;
 
 import android.app.Activity;
+import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.media.AudioManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -13,6 +15,7 @@ import android.support.annotation.DrawableRes;
 import android.support.annotation.NonNull;
 import android.support.v4.view.GestureDetectorCompat;
 import android.support.v7.app.AlertDialog;
+import android.support.v7.app.AppCompatDialog;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.GestureDetector;
@@ -22,6 +25,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -42,6 +46,8 @@ import com.leo.ijkplayer.media.weiget.ENPlayView;
 import java.util.Formatter;
 import java.util.Locale;
 
+import static com.leo.ijkplayer.R.id.total;
+
 /**
  * 默认 媒体播放控制器
  * Created on 2017/8/10 上午10:46.
@@ -56,6 +62,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     ///////////////////////////////////////////////////////////////////////////
     // 可配置
     ///////////////////////////////////////////////////////////////////////////
+
     /** 是否显示底部进度条 */
     private boolean mShowBottomProgress = true;
     /** 是否显示控制布局 */
@@ -79,10 +86,18 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private boolean mPreparedPlay;
     /** 是否检查当前是否为 Wifi */
     private boolean mCheckWifi = true;
+    /** 是否开启左边往上滑动改变亮度 */
+    private boolean mEnableSlideBrightness = true;
+    /** 是否开启右边往上滑动改变音量 */
+    private boolean mEnableSliderVolume = true;
+    /** 是否开启滑动改变播放进度 */
+    private boolean mEnableSlidePosition = true;
+
 
     ///////////////////////////////////////////////////////////////////////////
     // 常量区
     ///////////////////////////////////////////////////////////////////////////
+
     /** 自动隐藏 */
     private static final int FADE_OUT = 0;
     /** 显示进度值 */
@@ -95,6 +110,12 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private static final int SHOW_LAYOUT = 4;
     /** 更新封面图 */
     private static final int UPDATE_THUMB = 5;
+    /** 进度 Dialog */
+    private static final int UPDATE_POSITION_DIALOG = 6;
+    /** 亮度 Dialog */
+    private static final int UPDATE_BRIGHTNESS_DIALOG = 7;
+    /** 音量 Dialog */
+    private static final int UPDATE_VOLUME_DIALOG = 8;
 
 
     /** 通过旋转屏幕来全屏 */
@@ -108,6 +129,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     ///////////////////////////////////////////////////////////////////////////
     // 控件
     ///////////////////////////////////////////////////////////////////////////
+
     private ENDownloadView mLoadingView;
     private ENPlayView mBtnPlay;
     private LinearLayout mLayoutBottom;
@@ -117,10 +139,27 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private ImageView mBtnFullscreen;
     private ProgressBar mBottomProgressbar;
     private ImageView mImgThumb;
+    //position dialog
+    private View mPositionDialogContentView;
+    private Dialog mPositionDialog;
+    private ProgressBar mDialogProgress;
+    private TextView mDialogCurrent;
+    private TextView mDialogTotal;
+    //brightness dialog
+    private View mBrightnessContentView;
+    private Dialog mBrightnessDialog;
+    private TextView mDialogBrightness;
+    //volume dialog
+    private View mVolumeContentView;
+    private Dialog mVolumeDialog;
+    private ProgressBar mDialogVolume;
+    private ImageView mDialogVolumeLogo;
+
 
     ///////////////////////////////////////////////////////////////////////////
     // 内部变量
     ///////////////////////////////////////////////////////////////////////////
+
     private OrientationUtils mOrientationUtils;
     private IVideoView mVideoView;
     private Activity mContext;
@@ -143,7 +182,28 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private GestureDetectorCompat mGestureDetectorCompat;
     private int mCurrentState;
     private AlertDialog mInfoDialog;
+    /** 屏幕宽度 */
+    private int mScreenWidth;
+    /** 屏幕高度 */
+    private int mScreenHeight;
 
+    private float mSlideDamping = 2f;
+
+    /** 上一次滑动的进度 */
+    private int mPreSlidePosition = -1;
+    /** 是否正在滑动播放进度 */
+    private boolean mSlidePosition;
+
+    /** 上一次滑动的亮度 */
+    private float mPreSlideBrightness = -1;
+    /** 是否正在滑动亮度 */
+    private boolean mSlideBrightness;
+
+    /** 上一次滑动的音量 */
+    private int mPreSlideVolume = -1;
+    private AudioManager mAudioManager;
+    /** 是否正在滑动音量 */
+    private boolean mSlideVolume;
 
     private static final String NOT_READY_INFO = "视频还没准备好呢";
 
@@ -237,6 +297,21 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         return this;
     }
 
+    public MediaController setEnableSlideBrightness(boolean enableSlideBrightness) {
+        mEnableSlideBrightness = enableSlideBrightness;
+        return this;
+    }
+
+    public MediaController setEnableSliderVolume(boolean enableSliderVolume) {
+        mEnableSliderVolume = enableSliderVolume;
+        return this;
+    }
+
+    public MediaController setEnableSlidePosition(boolean enableSlidePosition) {
+        mEnableSlidePosition = enableSlidePosition;
+        return this;
+    }
+
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
@@ -290,6 +365,22 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
         mGestureDetectorCompat.onTouchEvent(ev);
+        int action = ev.getAction();
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+
+            if (getParent() instanceof ViewGroup) {
+                ViewGroup.class.cast(getParent()).requestDisallowInterceptTouchEvent(false);
+            }
+            handleSlidePosition();
+
+            //取消音量 Dialog
+            handleVoluemDialog();
+
+            //取消亮度 Dialog
+            handleBrightnessDialog();
+
+
+        }
         return super.onTouchEvent(ev);
     }
 
@@ -421,7 +512,12 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 show();
                 break;
             case IjkVideoManager.STATE_PLAYBACK_COMPLETED://播放完成
+                if (mLoadingView != null) {
+                    mLoadingView.reset();
+                    mLoadingView.setVisibility(GONE);
+                }
                 if (mBtnPlay != null) {
+                    mBtnPlay.setVisibility(VISIBLE);
                     mBtnPlay.pause();
                 }
                 show();
@@ -447,6 +543,11 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         if (!isActive()) {
             return;
         }
+
+        mScreenWidth = mContext.getResources().getDisplayMetrics().widthPixels;
+        mScreenHeight = mContext.getResources().getDisplayMetrics().heightPixels;
+
+        debug("选择屏幕后，当前屏幕尺寸：" + mScreenWidth + "，" + mScreenHeight);
 
         switch (screenOrientation) {
             case ActivityInfo.SCREEN_ORIENTATION_PORTRAIT://竖屏
@@ -490,6 +591,21 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         if (mToast != null) {
             mToast.cancel();
         }
+        if (mPositionDialog != null) {
+            mPositionDialog.dismiss();
+            mPositionDialog = null;
+        }
+        if (mBrightnessDialog != null) {
+            mBrightnessDialog.dismiss();
+            mBrightnessDialog = null;
+        }
+        if (mVolumeDialog != null) {
+            mVolumeDialog.dismiss();
+            mVolumeDialog = null;
+        }
+        if (mMainHandler != null) {
+            mMainHandler.removeCallbacksAndMessages(null);
+        }
     }
 
     public void toggleScreenOrientation() {
@@ -518,6 +634,14 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
         mContext = Activity.class.cast(context);
 
+        mAudioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
+
+        mScreenWidth = mContext.getResources().getDisplayMetrics().widthPixels;
+        mScreenHeight = mContext.getResources().getDisplayMetrics().heightPixels;
+
+        debug("当前屏幕尺寸：" + mScreenWidth + "，" + mScreenHeight);
+
+
         mOrientationUtils = new OrientationUtils(mContext);
         mOrientationUtils.setCallback(this);
         mOrientationUtils.setEnable(mEnableOrientation);
@@ -528,25 +652,133 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         setOnKeyListener(mOrientationKeyListener);
 
         mGestureDetectorCompat = new GestureDetectorCompat(mContext, new GestureDetector.SimpleOnGestureListener() {
+
             @Override
             public boolean onDown(MotionEvent e) {
+                if (mEnabled) {
+                    if (mEnableSlidePosition) {
+                        mPreSlidePosition = IjkVideoManager.getInstance().getCurrentPosition();
+                        debug("按下时，当前播放进度：" + stringForTime(mPreSlidePosition));
+                    }
+                    if (mEnableSliderVolume) {
+                        mPreSlideVolume = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+                        debug("按下时，当前的音量：" + mPreSlideVolume);
+                    }
+                    if (mEnableSlideBrightness) {
+                        mPreSlideBrightness = mContext.getWindow().getAttributes().screenBrightness;
+                        if (mPreSlideBrightness < 0) {
+                            mPreSlideBrightness = 0.5f;
+                        }
+                        debug("按下时，当前的亮度：" + mPreSlideBrightness);
+                    }
+
+                }
                 return mEnabled;
             }
 
             @Override
             public boolean onSingleTapConfirmed(MotionEvent e) {
+                if (!mEnabled) {
+                    return false;
+                }
                 toggleMediaControlsVisiblity();
                 return true;
             }
 
             @Override
             public boolean onDoubleTap(MotionEvent e) {
+                if (!mEnabled) {
+                    return false;
+                }
                 if (IjkVideoManager.getInstance().isPlaying()) {
                     pauseMedia();
                 } else {
                     playMedia();
                 }
                 return true;
+            }
+
+            @Override
+            public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
+                if (!mEnabled) {
+                    return false;
+                }
+
+                if (Math.abs(distanceX) > Math.abs(distanceY) && mEnableSlidePosition && !(mSlideBrightness || mSlideVolume)) {
+                    //滑动改变播放进度
+                    distanceX = -distanceX;
+                    int total = IjkVideoManager.getInstance().getDuration();
+                    mPreSlidePosition += distanceX * total * mSlideDamping / getWidth();
+                    if (mPreSlidePosition < 0) {
+                        mPreSlidePosition = 0;
+                    }
+                    if (mPreSlidePosition > total) {
+                        mPreSlidePosition = total;
+                    }
+                    mSlidePosition = true;
+                    Message message = mMainHandler.obtainMessage(UPDATE_POSITION_DIALOG, mPreSlidePosition);
+                    mMainHandler.sendMessage(message);
+
+                    if (getParent() instanceof ViewGroup) {
+                        ViewGroup.class.cast(getParent()).requestDisallowInterceptTouchEvent(true);
+                    }
+
+                    return true;
+                }
+
+                if (!mSlidePosition && Math.abs(distanceY) > Math.abs(distanceX)) {
+
+                    if (e1.getX() > getWidth() / 2f && mEnableSliderVolume && !mSlideBrightness) {
+                        if (getHeight() > (mScreenHeight * 2 / 3)) {
+                            mSlideDamping = 3f;
+                        }
+                        mSlideVolume = true;
+                        //滑动改变音量
+                        int maxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                        int diff = (int) ((e1.getY() - e2.getY()) * maxVolume * mSlideDamping / getHeight()) + mPreSlideVolume;
+                        if (diff < 0) {
+                            diff = 0;
+                        }
+                        if (diff > maxVolume) {
+                            diff = maxVolume;
+                        }
+                        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, diff, 0);
+                        Message message = mMainHandler.obtainMessage(UPDATE_VOLUME_DIALOG, diff);
+                        mMainHandler.sendMessage(message);
+
+                        if (getParent() instanceof ViewGroup) {
+                            ViewGroup.class.cast(getParent()).requestDisallowInterceptTouchEvent(true);
+                        }
+
+                        return true;
+
+                    } else if (mEnableSlideBrightness && !mSlideVolume) {
+                        //滑动改变亮度
+                        mSlideBrightness = true;
+                        float diff = (e1.getY() - e2.getY()) * mSlideDamping / getHeight() + mPreSlideBrightness;
+                        if (diff < 0) {
+                            diff = 0.01f;
+                        }
+                        if (diff > 1) {
+                            diff = 1;
+                        }
+
+                        WindowManager.LayoutParams layoutParams = mContext.getWindow().getAttributes();
+                        layoutParams.screenBrightness = diff;
+                        mContext.getWindow().setAttributes(layoutParams);
+
+                        Message message = mMainHandler.obtainMessage(UPDATE_BRIGHTNESS_DIALOG, diff);
+                        mMainHandler.sendMessage(message);
+
+                        if (getParent() instanceof ViewGroup) {
+                            ViewGroup.class.cast(getParent()).requestDisallowInterceptTouchEvent(true);
+                        }
+
+                        return true;
+                    }
+                }
+
+                return super.onScroll(e1, e2, distanceX, distanceY);
             }
         });
     }
@@ -593,32 +825,18 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 case UPDATE_THUMB:
                     updateThumb();
                     break;
+                case UPDATE_POSITION_DIALOG:
+                    showPositionDialog((Integer) msg.obj);
+                    break;
+                case UPDATE_BRIGHTNESS_DIALOG:
+                    showBrightnessDialog((Float) msg.obj);
+                    break;
+                case UPDATE_VOLUME_DIALOG:
+                    showVolumeDialog((Integer) msg.obj);
+                    break;
             }
         }
     };
-
-    /** 复位布局 */
-    private void resetLayout() {
-        if (mBottomProgressbar != null) {
-            mBottomProgressbar.setProgress(0);
-            mBottomProgressbar.setSecondaryProgress(0);
-        }
-        if (mSeekProgress != null) {
-            mSeekProgress.setProgress(0);
-            mSeekProgress.setSecondaryProgress(0);
-        }
-        if (mBtnPlay != null) {
-            mBtnPlay.setCurrentState(ENPlayView.STATE_PAUSE);
-        }
-
-        if (mLoadingView != null) {
-            mLoadingView.reset();
-        }
-
-        if (mTextCurrent != null) {
-            mTextCurrent.setText(stringForTime(0));
-        }
-    }
 
     /** 显示布局 */
     private void showLayout() {
@@ -780,7 +998,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         mLayoutBottom.setVisibility(mShowBottomLayout ? VISIBLE : GONE);
         mTextCurrent = (TextView) mediaView.findViewById(R.id.current);
         mSeekProgress = (SeekBar) mediaView.findViewById(R.id.progress);
-        mTextTotal = (TextView) mediaView.findViewById(R.id.total);
+        mTextTotal = (TextView) mediaView.findViewById(total);
         mBtnFullscreen = (ImageView) mediaView.findViewById(R.id.fullscreen);
         mBottomProgressbar = (ProgressBar) mediaView.findViewById(R.id.bottom_progressbar);
         mBottomProgressbar.setVisibility(mShowBottomProgress ? VISIBLE : GONE);
@@ -1023,6 +1241,281 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     public interface OnFullScreenChangeListener {
 
         void onFullScreenChange(boolean fullscreen);
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // volume dialog
+    ///////////////////////////////////////////////////////////////////////////
+
+    /**
+     * 设置当前音量
+     *
+     * @param volume -1 关闭 dialog
+     */
+    private void showVolumeDialog(int volume) {
+        if (mVolumeDialog == null && volume != -1) {
+            initVolumeDialog();
+        }
+
+        if (volume != -1) {
+            getCurrentVolume();
+            if (!mVolumeDialog.isShowing()) {
+
+                //关闭其他 dialog
+                mMainHandler.removeMessages(UPDATE_POSITION_DIALOG);
+                if (mPositionDialog != null) {
+                    mPositionDialog.dismiss();
+                }
+                mMainHandler.removeMessages(UPDATE_BRIGHTNESS_DIALOG);
+                if (mBrightnessDialog != null) {
+                    mBrightnessDialog.dismiss();
+                }
+
+                updateVolumeDialogLocation();
+                mVolumeDialog.show();
+            }
+        } else {
+            if (mVolumeDialog != null) {
+                mVolumeDialog.dismiss();
+            }
+        }
+    }
+
+    private void initVolumeDialog() {
+        if (mVolumeDialog != null) {
+            mVolumeDialog.dismiss();
+            mVolumeDialog = null;
+        }
+
+        mVolumeContentView = LayoutInflater.from(mContext).inflate(R.layout.dialog_volume, null);
+        mDialogVolume = (ProgressBar) mVolumeContentView.findViewById(R.id.volume);
+        mDialogVolumeLogo = (ImageView) mVolumeContentView.findViewById(R.id.volume_logo);
+        getCurrentVolume();
+
+        mVolumeDialog = new AppCompatDialog(mContext, R.style.AppDialog);
+        mVolumeDialog.setCancelable(false);
+        mVolumeDialog.setContentView(mVolumeContentView);
+    }
+
+    /** 更新 dialog 位置 */
+    private void updateVolumeDialogLocation() {
+        if (mVolumeDialog.getWindow() == null || mVolumeContentView == null) {
+            return;
+        }
+        int measure = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
+        mVolumeContentView.measure(measure, measure);
+        int contentViewHeight = mVolumeContentView.getMeasuredHeight();
+        WindowManager.LayoutParams layoutParams = mVolumeDialog.getWindow().getAttributes();
+        int[] locations = new int[2];
+        getLocationOnScreen(locations);
+        int centY = (int) (locations[1] + getHeight() / 2f);
+        int screenCentY = (int) (mScreenHeight / 2f);
+        layoutParams.y = (int) (centY - screenCentY - contentViewHeight / 2f);
+        mVolumeDialog.getWindow().setAttributes(layoutParams);
+    }
+
+    private void getCurrentVolume() {
+        if (mDialogVolume != null && mDialogVolumeLogo != null) {
+            int volume = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+            int maxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+            int progress = mDialogVolume.getMax() * volume / maxVolume;
+            mDialogVolume.setProgress(progress);
+            debug(String.format(Locale.CHINA, "当前音量：%d，最大音量：%d，占比：%d", volume, maxVolume, progress));
+            if (volume == 0) {
+                mDialogVolumeLogo.setImageResource(R.drawable.volume_x);
+            } else if (progress > 70) {
+                mDialogVolumeLogo.setImageResource(R.drawable.volume_2);
+            } else {
+                mDialogVolumeLogo.setImageResource(R.drawable.volume_1);
+            }
+        }
+    }
+
+    private void handleVoluemDialog() {
+        if (mSlideVolume) {
+            mSlideVolume = false;
+            mMainHandler.removeMessages(UPDATE_VOLUME_DIALOG);
+            Message message = mMainHandler.obtainMessage(UPDATE_VOLUME_DIALOG, -1);
+            mMainHandler.sendMessage(message);
+        }
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // brightness dialog
+    ///////////////////////////////////////////////////////////////////////////
+
+    /**
+     * 设置当前亮度
+     *
+     * @param brightness -1 关闭 dialog
+     */
+    private void showBrightnessDialog(float brightness) {
+        if (mBrightnessDialog == null && brightness != -1) {
+            initBrightnessDialog();
+        }
+
+        if (brightness != -1) {
+            mDialogBrightness.setText(String.format(Locale.CHINA, "%d %%", (int) (brightness * 100)));
+            if (!mBrightnessDialog.isShowing()) {
+
+
+                //关闭其他 dialog
+                mMainHandler.removeMessages(UPDATE_POSITION_DIALOG);
+                if (mPositionDialog != null) {
+                    mPositionDialog.dismiss();
+                }
+                mMainHandler.removeMessages(UPDATE_VOLUME_DIALOG);
+                if (mVolumeDialog != null) {
+                    mVolumeDialog.dismiss();
+                }
+
+
+                updateBrightnessDialogLocation();
+                mBrightnessDialog.show();
+            }
+        } else {
+            if (mBrightnessDialog != null) {
+                mBrightnessDialog.dismiss();
+            }
+        }
+    }
+
+    private void initBrightnessDialog() {
+        if (mBrightnessDialog != null) {
+            mBrightnessDialog.dismiss();
+            mBrightnessDialog = null;
+        }
+
+        mBrightnessContentView = LayoutInflater.from(mContext).inflate(R.layout.dialog_brightness, null);
+        mDialogBrightness = (TextView) mBrightnessContentView.findViewById(R.id.brightness);
+        mDialogBrightness.setText(String.format(Locale.CHINA, "%d %%", 0));
+
+        mBrightnessDialog = new AppCompatDialog(mContext, R.style.AppDialog);
+        mBrightnessDialog.setCancelable(false);
+        mBrightnessDialog.setContentView(mBrightnessContentView);
+    }
+
+    /** 更新 dialog 位置 */
+    private void updateBrightnessDialogLocation() {
+        if (mBrightnessDialog.getWindow() == null || mBrightnessContentView == null) {
+            return;
+        }
+        int measure = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
+        mBrightnessContentView.measure(measure, measure);
+        int contentViewHeight = mBrightnessContentView.getMeasuredHeight();
+        WindowManager.LayoutParams layoutParams = mBrightnessDialog.getWindow().getAttributes();
+        int[] locations = new int[2];
+        getLocationOnScreen(locations);
+        int centY = (int) (locations[1] + getHeight() / 2f);
+        int screenCentY = (int) (mScreenHeight / 2f);
+        layoutParams.y = (int) (centY - screenCentY - contentViewHeight / 2f);
+        mBrightnessDialog.getWindow().setAttributes(layoutParams);
+    }
+
+    private void handleBrightnessDialog() {
+        if (mSlideBrightness) {
+            mSlideBrightness = false;
+            mMainHandler.removeMessages(UPDATE_BRIGHTNESS_DIALOG);
+            Message message = mMainHandler.obtainMessage(UPDATE_BRIGHTNESS_DIALOG, -1f);
+            mMainHandler.sendMessage(message);
+        }
+    }
+
+
+    ///////////////////////////////////////////////////////////////////////////
+    // position dialog
+    ///////////////////////////////////////////////////////////////////////////
+
+    /** 处理滑动的播放进度 */
+    private void handleSlidePosition() {
+        //取消进度 dialog
+        mMainHandler.removeMessages(UPDATE_POSITION_DIALOG);
+        Message message = mMainHandler.obtainMessage(UPDATE_POSITION_DIALOG, -1);
+        mMainHandler.sendMessage(message);
+        //更新播放进度
+        if (mSlidePosition && mPreSlidePosition != -1 && mPreSlidePosition != IjkVideoManager.getInstance().getCurrentPosition()) {
+            IjkVideoManager.getInstance().seekTo(mPreSlidePosition);
+        }
+        mSlidePosition = false;
+        mPreSlidePosition = -1;
+    }
+
+    /**
+     * 设置进度 dialog
+     *
+     * @param seekPosition -1 为关闭 dialog
+     */
+    private void showPositionDialog(int seekPosition) {
+        if (mPositionDialog == null && seekPosition != -1) {
+            initPositionDialog();
+        }
+
+        if (seekPosition != -1) {
+            int total = IjkVideoManager.getInstance().getDuration();
+
+            long pos = mSeekProgress.getMax() * seekPosition / total;
+
+            mDialogCurrent.setText(stringForTime(seekPosition));
+            mDialogProgress.setProgress((int) pos);
+            if (!mPositionDialog.isShowing()) {
+
+                //关闭其他 dialog
+                mMainHandler.removeMessages(UPDATE_BRIGHTNESS_DIALOG);
+                if (mBrightnessDialog != null) {
+                    mBrightnessDialog.dismiss();
+                }
+                mMainHandler.removeMessages(UPDATE_VOLUME_DIALOG);
+                if (mVolumeDialog != null) {
+                    mVolumeDialog.dismiss();
+                }
+
+                updatePositionDialogLocation();
+                mPositionDialog.show();
+            }
+        } else {
+            if (mPositionDialog != null) {
+                mPositionDialog.dismiss();
+            }
+        }
+
+    }
+
+    /** 更新 dialog 位置 */
+    private void updatePositionDialogLocation() {
+        if (mPositionDialog.getWindow() == null || mPositionDialogContentView == null) {
+            return;
+        }
+        int measure = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
+        mPositionDialogContentView.measure(measure, measure);
+        int contentViewHeight = mPositionDialogContentView.getMeasuredHeight();
+        WindowManager.LayoutParams layoutParams = mPositionDialog.getWindow().getAttributes();
+        int[] locations = new int[2];
+        getLocationOnScreen(locations);
+        int centY = (int) (locations[1] + getHeight() / 2f);
+        int screenCentY = (int) (mScreenHeight / 2f);
+        layoutParams.y = (int) (centY - screenCentY - contentViewHeight / 2f);
+        mPositionDialog.getWindow().setAttributes(layoutParams);
+    }
+
+    private void initPositionDialog() {
+        if (mPositionDialog != null) {
+            mPositionDialog.dismiss();
+            mPositionDialog = null;
+        }
+
+        mPositionDialogContentView = LayoutInflater.from(mContext).inflate(R.layout.dialog_video_position, null);
+        mDialogProgress = (ProgressBar) mPositionDialogContentView.findViewById(R.id.progress);
+        mDialogTotal = (TextView) mPositionDialogContentView.findViewById(total);
+        mDialogCurrent = (TextView) mPositionDialogContentView.findViewById(R.id.current);
+
+        mDialogTotal.setText(String.format(Locale.CHINA, " / %s", stringForTime(IjkVideoManager.getInstance().getDuration())));
+        mDialogCurrent.setText(stringForTime(0));
+        mDialogProgress.setProgress(0);
+
+        mPositionDialog = new AppCompatDialog(mContext, R.style.AppDialog);
+        mPositionDialog.setCancelable(false);
+        mPositionDialog.setContentView(mPositionDialogContentView);
+
     }
 
     ///////////////////////////////////////////////////////////////////////////

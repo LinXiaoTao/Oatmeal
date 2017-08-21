@@ -114,10 +114,6 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     private int mCurrentState = STATE_IDLE;
     private int mTargetState = STATE_IDLE;
 
-    private long mPrepareStartTime = 0;
-    private long mPrepareEndTime = 0;
-    private long mSeekStartTime = 0;
-    private long mSeekEndTime = 0;
     /** 缓冲中记录拖动位置 */
     private int mSeekWhenPrepared;
     /** 当前缓冲百分比 */
@@ -153,6 +149,11 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
 
     public boolean isCache() {
         return mIsCache;
+    }
+
+    public IjkVideoManager setTimeOut(int timeOut) {
+        mTimeOut = timeOut;
+        return this;
     }
 
     /**
@@ -206,7 +207,6 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
 
     public void seekTo(int msec) {
         if (isInPlaybackState()) {
-            mSeekStartTime = System.currentTimeMillis();
             mMediaPlayer.seekTo(msec);
             mSeekWhenPrepared = 0;
         } else {

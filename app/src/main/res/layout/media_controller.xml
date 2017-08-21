@@ -78,7 +78,7 @@
         <ImageView
             android:id="@+id/fullscreen"
             android:layout_width="wrap_content"
-            android:layout_height="fill_parent"
+            android:layout_height="match_parent"
             android:paddingRight="16dp"
             android:scaleType="center"
             android:src="@drawable/video_enlarge"/>
