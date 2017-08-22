@@ -41,6 +41,7 @@ import com.leo.player.media.controller.IMediaController;
 import com.leo.player.media.render.IRenderView;
 import com.leo.player.media.render.SurfaceRenderView;
 import com.leo.player.media.render.TextureRenderView;
+import com.leo.player.media.util.LoggerUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -562,17 +563,16 @@ public class IjkVideoView extends FrameLayout implements IVideoView {
     }
 
 
-
     ///////////////////////////////////////////////////////////////////////////
     // util
     ///////////////////////////////////////////////////////////////////////////
 
 
     private void debug(@NonNull String info) {
-        Log.d(TAG, info);
+        LoggerUtil.debugLog(TAG, info);
     }
 
     private void error(@NonNull String info) {
-        Log.e(TAG, info);
+        LoggerUtil.errorLog(TAG, info);
     }
 }

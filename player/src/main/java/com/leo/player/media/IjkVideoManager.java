@@ -12,12 +12,12 @@ import android.os.Message;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
-import android.util.Log;
 
 import com.danikula.videocache.CacheListener;
 import com.danikula.videocache.HttpProxyCacheServer;
 import com.leo.player.media.datasource.FileMediaDataSource;
 import com.leo.player.media.render.IRenderView;
+import com.leo.player.media.util.LoggerUtil;
 import com.leo.player.media.util.StorageUtils;
 import com.leo.player.media.videoview.IVideoView;
 
@@ -53,6 +53,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     private Uri mCurrentUri;
     /** 播放的原始 Uri */
     private Uri mOriginalUri;
+
 
     /**
      * video view
@@ -137,6 +138,11 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
         mMediaHandler = new MediaHandler(handlerThread.getLooper());
         mMainThreadHandler = new Handler(Looper.getMainLooper());
     }
+
+    public static void setLog(boolean log) {
+        LoggerUtil.setLog(log);
+    }
+
 
     public IjkVideoManager setPlayPosition(int playPosition) {
         mPlayPosition = playPosition;
@@ -804,11 +810,11 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     ///////////////////////////////////////////////////////////////////////////
 
     private void debugLog(String message) {
-        Log.d(TAG, message);
+        LoggerUtil.debugLog(TAG, message);
     }
 
     private void errorLog(String message) {
-        Log.e(TAG, message);
+        LoggerUtil.errorLog(TAG, message);
     }
 
 

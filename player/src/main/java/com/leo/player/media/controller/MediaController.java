@@ -18,7 +18,6 @@ import android.support.v4.view.GestureDetectorCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatDialog;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.view.GestureDetector;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -37,6 +36,7 @@ import android.widget.Toast;
 
 import com.leo.player.R;
 import com.leo.player.media.IjkVideoManager;
+import com.leo.player.media.util.LoggerUtil;
 import com.leo.player.media.util.NetworkUtils;
 import com.leo.player.media.util.OrientationUtils;
 import com.leo.player.media.videoview.IVideoView;
@@ -1558,11 +1558,11 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     }
 
     private void debug(@NonNull String info) {
-        Log.d(TAG, info);
+        LoggerUtil.debugLog(TAG, info);
     }
 
     private void error(@NonNull String info) {
-        Log.e(TAG, info);
+        LoggerUtil.errorLog(TAG, info);
     }
 
 }
