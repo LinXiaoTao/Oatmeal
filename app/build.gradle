@@ -26,11 +26,12 @@ dependencies {
     })
     compile 'com.android.support:appcompat-v7:25.3.1'
     testCompile 'junit:junit:4.12'
-
     compile project(':player')
-//    compile 'com.leo.android:player:1.0.1-SNAPSHOT'
-
+    //    compile 'com.leo.android:player:1.0.1-SNAPSHOT'
     compile 'com.android.support:recyclerview-v7:25.3.1'
     debugCompile 'com.squareup.leakcanary:leakcanary-android:1.5.2'
     releaseCompile 'com.squareup.leakcanary:leakcanary-android-no-op:1.5.2'
+
+    annotationProcessor 'com.github.bumptech.glide:compiler:4.0.0'
+    compile 'com.github.bumptech.glide:glide:4.0.0'
 }

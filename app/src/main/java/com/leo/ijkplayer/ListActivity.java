@@ -1,16 +1,22 @@
 package com.leo.ijkplayer;
 
 import android.content.Intent;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.request.RequestOptions;
+import com.bumptech.glide.request.target.SimpleTarget;
+import com.bumptech.glide.request.transition.Transition;
 import com.leo.player.media.IjkVideoManager;
 import com.leo.player.media.controller.MediaController;
 import com.leo.player.media.util.NetworkUtils;
@@ -124,17 +130,36 @@ public class ListActivity extends AppCompatActivity {
 
     private static class Adapter extends RecyclerView.Adapter<ViewHolder> {
 
+        private int mVideoWidth;
+        private int mVideoHeight;
+
+        private static final String[] IMGS = {"http://pic4.nipic.com/20091217/3279936_085313832375_2.jpg"
+                , "https://b-ssl.duitang.com/uploads/item/201203/21/20120321162242_wdG8r.thumb.700_0.jpeg"
+                , "http://imgsrc.baidu.com/baike/pic/item/f636afc379310a550e25d28ab34543a98226104e.jpg"
+                , "http://c1.hoopchina.com.cn/uploads/star/event/images/141208/067438ed3ecdbdff6067d056315aed16ed2d3358.jpg"
+                , "http://b.zol-img.com.cn/desk/bizhi/image/1/960x600/1348724812863.jpg"
+                , "http://news.cnhubei.com/xw/ty/201612/W020161226410633306261.jpeg"
+                , "http://img.zybus.com/uploads/allimg/141110/1-141110163R2.jpg"
+                , "http://img4q.duitang.com/uploads/item/201406/26/20140626135444_jruft.jpeg"
+                , "http://img0.imgtn.bdimg.com/it/u=2763254483,2728302026&fm=214&gp=0.jpg"
+                , "http://cdn.duitang.com/uploads/item/201411/27/20141127184622_SEwUF.jpeg"
+                , "http://pic19.nipic.com/20120320/8279160_140432483114_2.jpg"
+                , "http://img1.gtimg.com/sports/pics/hv1/232/231/1859/120940612.jpg"
+                , "http://img.zybus.com/uploads/allimg/141110/1-141110163K5.jpg"
+                , "http://cdnq.duitang.com/uploads/item/201404/14/20140414001638_hratS.jpeg"};
+
 
         @Override
         public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
             View contentView = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_video, parent, false);
             ViewHolder viewHolder = new ViewHolder(contentView);
             viewHolder.controller = new MediaController(parent.getContext());
-            viewHolder.controller.setThumbRes(R.drawable.xxx2);
             viewHolder.controller.setFullScreenMode(MediaController.FULLSCREEN_VIEW);
             viewHolder.controller.setMute(true);
             viewHolder.controller.setShowBottomLayout(false);
             viewHolder.video.setMediaController(viewHolder.controller);
+            mVideoWidth = parent.getContext().getResources().getDisplayMetrics().widthPixels;
+            mVideoHeight = viewHolder.video.getLayoutParams().height;
             return viewHolder;
         }
 
@@ -149,6 +174,18 @@ public class ListActivity extends AppCompatActivity {
                     holder.controller.toggleFullScreenView();
                 }
             });
+            Glide
+                    .with(holder.itemView.getContext())
+                    .load(IMGS[position])
+                    .apply(RequestOptions.overrideOf(mVideoWidth, mVideoHeight))
+                    .apply(RequestOptions.centerCropTransform())
+                    .into(new SimpleTarget<Drawable>() {
+                        @Override
+                        public void onResourceReady(Drawable resource, Transition<? super Drawable> transition) {
+                            Log.d(getClass().getSimpleName(), "resource：" + resource + "，transition：" + transition);
+                            holder.controller.setThumbDrawable(resource);
+                        }
+                    });
 
         }
 

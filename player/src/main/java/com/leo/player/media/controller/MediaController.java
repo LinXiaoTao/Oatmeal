@@ -7,14 +7,16 @@ import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
-import android.support.annotation.DrawableRes;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.v4.content.ContextCompat;
 import android.support.v4.view.GestureDetectorCompat;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.AlertDialog;
@@ -75,8 +77,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private boolean mShowBottomLayout = true;
     /** 是否显示封面图 */
     private boolean mShowThumb = true;
-    @DrawableRes
-    private int mThumbRes;
+    private Drawable mThumbDrawable;
     /** 兼容列表播放，记录当前播放序号 */
     private int mPlayPosition = -1;
     /** 是否启用屏幕感应 */
@@ -266,7 +267,15 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     }
 
     public MediaController setThumbRes(int thumbRes) {
-        mThumbRes = thumbRes;
+        setThumbDrawable(ContextCompat.getDrawable(mContext, thumbRes));
+        return this;
+    }
+
+    public MediaController setThumbDrawable(Drawable thumbDrawable) {
+        if (thumbDrawable != null) {
+            thumbDrawable.setBounds(0, 0, thumbDrawable.getIntrinsicWidth(), thumbDrawable.getIntrinsicHeight());
+        }
+        mThumbDrawable = thumbDrawable;
         mMainHandler.sendEmptyMessage(UPDATE_THUMB);
         return this;
     }
@@ -639,6 +648,12 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         }
         if (mMainHandler != null) {
             mMainHandler.removeCallbacksAndMessages(null);
+        }
+        if (mContext.getWindow() != null) {
+            //恢复亮度
+            WindowManager.LayoutParams layoutParams = mContext.getWindow().getAttributes();
+            layoutParams.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+            mContext.getWindow().setAttributes(layoutParams);
         }
     }
 
@@ -1035,8 +1050,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         mBottomProgressbar.setVisibility(mShowBottomProgress ? VISIBLE : GONE);
         mImgThumb = (ImageView) mediaView.findViewById(R.id.thumb);
         mImgThumb.setVisibility(mShowThumb ? VISIBLE : GONE);
-        if (mShowThumb && mThumbRes > 0) {
-            mImgThumb.setImageResource(mThumbRes);
+        if (mShowThumb && mThumbDrawable != null) {
+            mImgThumb.setImageDrawable(mThumbDrawable);
         }
 
         mBtnFullscreen.setOnClickListener(mFullScreenListener);
@@ -1286,9 +1301,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         if (mImgThumb != null) {
             boolean needShow = !isActive() && mShowThumb;
             mImgThumb.setVisibility(needShow ? VISIBLE : GONE);
-            if (needShow && mThumbRes > 0) {
-                mImgThumb.setImageResource(mThumbRes);
-            }
+            mImgThumb.setImageDrawable(mThumbDrawable);
 
         }
     }

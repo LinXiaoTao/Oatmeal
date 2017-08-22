@@ -18,6 +18,8 @@ public class MainActivity extends AppCompatActivity {
 
         mIjkVideoView = (IjkVideoView) findViewById(R.id.video_view);
         MediaController mediaController = new MediaController(this);
+        mediaController.setShowThumb(true);
+        mediaController.setThumbRes(R.drawable.xxx2);
         mIjkVideoView.setMediaController(mediaController);
 
         mIjkVideoView.setVideoPath("http://baobab.wdjcdn.com/14564977406580.mp4");
