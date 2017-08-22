@@ -4,7 +4,7 @@ buildscript {
     repositories {
         jcenter()
         maven {
-            url "http://192.168.1.253:8070/nexus/content/groups/public/"
+            url "http://192.168.1.253:8070/nexus/content/repositories/releases/"
         }
     }
     dependencies {
