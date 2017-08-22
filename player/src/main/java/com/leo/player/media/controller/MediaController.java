@@ -9,13 +9,16 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.media.AudioManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.support.annotation.DrawableRes;
 import android.support.annotation.NonNull;
 import android.support.v4.view.GestureDetectorCompat;
+import android.support.v7.app.ActionBar;
 import android.support.v7.app.AlertDialog;
+import android.support.v7.app.AppCompatActivity;
 import android.support.v7.app.AppCompatDialog;
 import android.util.AttributeSet;
 import android.view.GestureDetector;
@@ -47,6 +50,7 @@ import com.leo.player.media.weiget.ENPlayView;
 import java.util.Formatter;
 import java.util.Locale;
 
+import static com.leo.player.R.id.fullscreen;
 import static com.leo.player.R.id.total;
 
 
@@ -94,6 +98,12 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private boolean mEnableSliderVolume = true;
     /** 是否开启滑动改变播放进度 */
     private boolean mEnableSlidePosition = true;
+    /** 全屏视图模式下是否开启右边往上滑动改变音量 */
+    private boolean mFullScreenViewEnableSlideBrightness = true;
+    /** 全屏视图模式下是否开启右边往上滑动改变音量 */
+    private boolean mFullScreenViewEnableSliderVolume = true;
+    /** 全屏视图模式下是否开启滑动改变播放进度 */
+    private boolean mFullScreenViewEnableSlidePosition = true;
 
 
     ///////////////////////////////////////////////////////////////////////////
@@ -181,6 +191,10 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private boolean mShowing;
     /** 用于恢复全屏时使用 */
     private int mSystemUiVisibility = -1;
+    /** 使用 fullscreen view 之前是否为全屏 */
+    private boolean mOriginalFullScreen;
+    /** 使用 fullscreen view 之前是否显示 actionbar */
+    private boolean mOriginalActionBar;
     /** 全屏显示的控件 */
     private View mFullScreenView;
     private GestureDetectorCompat mGestureDetectorCompat;
@@ -313,6 +327,21 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
     public MediaController setEnableSlidePosition(boolean enableSlidePosition) {
         mEnableSlidePosition = enableSlidePosition;
+        return this;
+    }
+
+    public MediaController setFullScreenViewEnableSlideBrightness(boolean fullScreenViewEnableSlideBrightness) {
+        mFullScreenViewEnableSlideBrightness = fullScreenViewEnableSlideBrightness;
+        return this;
+    }
+
+    public MediaController setFullScreenViewEnableSliderVolume(boolean fullScreenViewEnableSliderVolume) {
+        mFullScreenViewEnableSliderVolume = fullScreenViewEnableSliderVolume;
+        return this;
+    }
+
+    public MediaController setFullScreenViewEnableSlidePosition(boolean fullScreenViewEnableSlidePosition) {
+        mFullScreenViewEnableSlidePosition = fullScreenViewEnableSlidePosition;
         return this;
     }
 
@@ -545,7 +574,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
     @Override
     public void screenOrientationChangle(int screenOrientation) {
-        if (!isActive()) {
+        if (!isActive() || mFullScreenMode != FULLSCREEN_ORIENTATION) {
             return;
         }
 
@@ -734,13 +763,10 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 if (!mSlidePosition && Math.abs(distanceY) > Math.abs(distanceX)) {
 
                     if (e1.getX() > getWidth() / 2f && mEnableSliderVolume && !mSlideBrightness) {
-                        if (getHeight() > (mScreenHeight * 2 / 3)) {
-                            mSlideDamping = 3f;
-                        }
                         mSlideVolume = true;
                         //滑动改变音量
                         int maxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-                        int diff = (int) ((e1.getY() - e2.getY()) * maxVolume * mSlideDamping / getHeight()) + mPreSlideVolume;
+                        int diff = (int) ((e1.getY() - e2.getY()) * maxVolume / getHeight()) + mPreSlideVolume;
                         if (diff < 0) {
                             diff = 0;
                         }
@@ -1004,7 +1030,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         mTextCurrent = (TextView) mediaView.findViewById(R.id.current);
         mSeekProgress = (SeekBar) mediaView.findViewById(R.id.progress);
         mTextTotal = (TextView) mediaView.findViewById(R.id.total);
-        mBtnFullscreen = (ImageView) mediaView.findViewById(R.id.fullscreen);
+        mBtnFullscreen = (ImageView) mediaView.findViewById(fullscreen);
         mBottomProgressbar = (ProgressBar) mediaView.findViewById(R.id.bottom_progressbar);
         mBottomProgressbar.setVisibility(mShowBottomProgress ? VISIBLE : GONE);
         mImgThumb = (ImageView) mediaView.findViewById(R.id.thumb);
@@ -1114,16 +1140,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             mFullScreenView = null;
         }
 
-        mSystemUiVisibility = mContext.getWindow().getDecorView().getSystemUiVisibility()
-                | SYSTEM_UI_FLAG_LAYOUT_STABLE
-                | SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
 
-        int systemUiVisibility = SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                | SYSTEM_UI_FLAG_LAYOUT_STABLE
-                | SYSTEM_UI_FLAG_FULLSCREEN
-                | SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
-
-        mContext.getWindow().getDecorView().setSystemUiVisibility(systemUiVisibility);
+        fullscreen();
 
 
         IjkVideoManager.getInstance().clearVideoView();
@@ -1140,6 +1158,9 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
         ijkVideoView.setSettings(mVideoView.getSettings());
         final MediaController mediaController = new MediaController(mContext);
+        mediaController.setEnableSlideBrightness(mFullScreenViewEnableSlideBrightness);
+        mediaController.setEnableSlidePosition(mFullScreenViewEnableSlidePosition);
+        mediaController.setEnableSliderVolume(mFullScreenViewEnableSliderVolume);
         mediaController.setShowBottomLayout(mShowBottomLayout);
         //全屏播放器可以处理返回按键
         mediaController.setFocusableInTouchMode(true);
@@ -1178,8 +1199,42 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         ViewGroup.LayoutParams layoutParams = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         viewGroup.addView(mFullScreenView, layoutParams);
 
+        mFullscreen = true;
 
     }
+
+    private void fullscreen() {
+        //全屏
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            mSystemUiVisibility = mContext.getWindow().getDecorView().getSystemUiVisibility()
+                    | SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
+            int systemUiVisibility = SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | SYSTEM_UI_FLAG_FULLSCREEN
+                    | SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+            mContext.getWindow().getDecorView().setSystemUiVisibility(systemUiVisibility);
+        } else {
+            int flag = mContext.getWindow().getAttributes().flags;
+            mOriginalFullScreen = (flag & WindowManager.LayoutParams.FLAG_FULLSCREEN) > 0;
+            if (!mOriginalFullScreen) {
+                mContext.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN
+                        , WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            }
+            if (mContext instanceof AppCompatActivity) {
+                ActionBar actionBar = ((AppCompatActivity) mContext).getSupportActionBar();
+                if (actionBar != null && actionBar.isShowing()) {
+                    mOriginalActionBar = true;
+                    actionBar.setShowHideAnimationEnabled(false);
+                    actionBar.hide();
+                }
+            } else if (mContext.getActionBar() != null && mContext.getActionBar().isShowing()) {
+                mOriginalActionBar = true;
+                mContext.getActionBar().hide();
+            }
+        }
+    }
+
 
     private void removeFullScreenView() {
 
@@ -1193,9 +1248,10 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             mFullScreenView = null;
         }
 
-        if (mSystemUiVisibility != -1) {
-            mContext.getWindow().getDecorView().setSystemUiVisibility(mSystemUiVisibility);
-        }
+        //恢复界面
+        exitFullscreen();
+
+
         if (mVideoView != null) {
             //恢复
             IjkVideoManager.getInstance().setMute(mMute);
@@ -1203,8 +1259,27 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             IjkVideoManager.getInstance().setStateChangeListener(this);
             IjkVideoManager.getInstance().refreshRenderView();
         }
-
+        mFullscreen = false;
     }
+
+    private void exitFullscreen() {
+        if (mSystemUiVisibility != -1) {
+            mContext.getWindow().getDecorView().setSystemUiVisibility(mSystemUiVisibility);
+        } else {
+            if (!mOriginalFullScreen) {
+                mContext.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            }
+            if (mOriginalActionBar) {
+                mOriginalActionBar = false;
+                if (mContext.getActionBar() != null) {
+                    mContext.getActionBar().show();
+                } else if (mContext instanceof AppCompatActivity && ((AppCompatActivity) mContext).getSupportActionBar() != null) {
+                    ((AppCompatActivity) mContext).getSupportActionBar().show();
+                }
+            }
+        }
+    }
+
 
     /** 更新封面图 */
     private void updateThumb() {

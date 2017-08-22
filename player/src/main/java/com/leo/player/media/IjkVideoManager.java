@@ -178,9 +178,10 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
             httpProxyCacheServer.unregisterCacheListener(this);
             httpProxyCacheServer.registerCacheListener(this, mOriginalUri.toString());
             debugLog("转换后的 url：" + mCurrentUri.toString());
-            if (mCurrentUri.getScheme().equals("file")) {
+            if (httpProxyCacheServer.isCached(mOriginalUri.toString())){
                 mIsCache = true;
             }
+
         }
         mCurrentState = STATE_PREPARING;
         notifyStateChange();

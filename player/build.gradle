@@ -36,7 +36,4 @@ dependencies {
     compile 'com.danikula:videocache:2.7.0'
 }
 
-task copyLibs(type: Copy) {
-    from configurations.compile
-    into 'libs'
-}
+
