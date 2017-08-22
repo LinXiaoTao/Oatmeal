@@ -1,8 +1,12 @@
 package com.leo.player.media.util;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Environment;
 import android.support.annotation.Nullable;
+import android.support.v4.content.ContextCompat;
 
 import com.danikula.videocache.file.Md5FileNameGenerator;
 
@@ -24,8 +28,17 @@ public class StorageUtils {
      */
     @Nullable
     public static File getCacheDirectory(Context context) {
-        if (isExternalStorageWritable()) {
-            return context.getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+
+        //检查是否有外部存储权限
+        int permission = ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        boolean hasPermission = (permission == PackageManager.PERMISSION_GRANTED) ||
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT);
+
+        if (isExternalStorageWritable() && hasPermission) {
+            //删除可能存在内部存储的缓存
+            delFile(new File(context.getCacheDir(),INDIVIDUAL_DIR_NAME));
+            File movies = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+            return new File(movies, INDIVIDUAL_DIR_NAME);
         } else {
             return new File(context.getCacheDir(), INDIVIDUAL_DIR_NAME);
         }
