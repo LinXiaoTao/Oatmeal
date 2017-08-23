@@ -7,7 +7,8 @@ import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.Color;
-import android.graphics.drawable.Drawable;
+import android.graphics.Rect;
+import android.graphics.drawable.ColorDrawable;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
@@ -16,7 +17,6 @@ import android.os.Looper;
 import android.os.Message;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
-import android.support.v4.content.ContextCompat;
 import android.support.v4.view.GestureDetectorCompat;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.AlertDialog;
@@ -77,7 +77,6 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private boolean mShowBottomLayout = true;
     /** 是否显示封面图 */
     private boolean mShowThumb = true;
-    private Drawable mThumbDrawable;
     /** 兼容列表播放，记录当前播放序号 */
     private int mPlayPosition = -1;
     /** 是否启用屏幕感应 */
@@ -224,6 +223,9 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     /** 是否正在滑动音量 */
     private boolean mSlideVolume;
 
+    /** 状态栏高度 */
+    private int mStatusHeight;
+
     private static final String NOT_READY_INFO = "视频还没准备好呢";
 
     public MediaController(Context context) {
@@ -266,18 +268,9 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         return this;
     }
 
-    public MediaController setThumbRes(int thumbRes) {
-        setThumbDrawable(ContextCompat.getDrawable(mContext, thumbRes));
-        return this;
-    }
-
-    public MediaController setThumbDrawable(Drawable thumbDrawable) {
-        if (thumbDrawable != null) {
-            thumbDrawable.setBounds(0, 0, thumbDrawable.getIntrinsicWidth(), thumbDrawable.getIntrinsicHeight());
-        }
-        mThumbDrawable = thumbDrawable;
-        mMainHandler.sendEmptyMessage(UPDATE_THUMB);
-        return this;
+    @Nullable
+    public ImageView getImgThumb() {
+        return mImgThumb;
     }
 
     public MediaController setEnableOrientation(boolean enableOrientation) {
@@ -683,6 +676,12 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
         mContext = Activity.class.cast(context);
 
+        //获取状态栏高度
+        Rect rect = new Rect();
+        mContext.getWindow().getDecorView().getWindowVisibleDisplayFrame(rect);
+        mStatusHeight = rect.top;
+        debug("当前状态高度：" + mStatusHeight);
+
         mAudioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
 
         mScreenWidth = mContext.getResources().getDisplayMetrics().widthPixels;
@@ -705,6 +704,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             @Override
             public boolean onDown(MotionEvent e) {
                 if (mEnabled) {
+
                     if (mEnableSlidePosition) {
                         mPreSlidePosition = IjkVideoManager.getInstance().getCurrentPosition();
                         debug("按下时，当前播放进度：" + stringForTime(mPreSlidePosition));
@@ -720,6 +720,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                         }
                         debug("按下时，当前的亮度：" + mPreSlideBrightness);
                     }
+
 
                 }
                 return mEnabled;
@@ -753,11 +754,17 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                     return false;
                 }
 
+                //判断是否点击在状态栏范围
+                if (mStatusHeight > 0 && e1.getY() <= mStatusHeight) {
+                    return false;
+                }
+
+
                 if (Math.abs(distanceX) > Math.abs(distanceY) && mEnableSlidePosition && !(mSlideBrightness || mSlideVolume)) {
                     //滑动改变播放进度
                     distanceX = -distanceX;
                     int total = IjkVideoManager.getInstance().getDuration();
-                    mPreSlidePosition += distanceX * total * mSlideDamping / getWidth();
+                    mPreSlidePosition += distanceX * total / getWidth();
                     if (mPreSlidePosition < 0) {
                         mPreSlidePosition = 0;
                     }
@@ -778,10 +785,17 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                 if (!mSlidePosition && Math.abs(distanceY) > Math.abs(distanceX)) {
 
                     if (e1.getX() > getWidth() / 2f && mEnableSliderVolume && !mSlideBrightness) {
+
+                        if (getHeight() > (mScreenHeight * 2 / 3)) {
+                            mSlideDamping = 3f;
+                        } else {
+                            mSlideDamping = 2f;
+                        }
+
                         mSlideVolume = true;
                         //滑动改变音量
                         int maxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-                        int diff = (int) ((e1.getY() - e2.getY()) * maxVolume / getHeight()) + mPreSlideVolume;
+                        int diff = (int) ((e1.getY() - e2.getY()) * mSlideDamping * maxVolume / getHeight()) + mPreSlideVolume;
                         if (diff < 0) {
                             diff = 0;
                         }
@@ -792,14 +806,15 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                         Message message = mMainHandler.obtainMessage(UPDATE_VOLUME_DIALOG, diff);
                         mMainHandler.sendMessage(message);
 
-                        if (getParent() instanceof ViewGroup) {
-                            ViewGroup.class.cast(getParent()).requestDisallowInterceptTouchEvent(true);
-                        }
-
                         return true;
 
                     } else if (mEnableSlideBrightness && !mSlideVolume) {
                         //滑动改变亮度
+                        if (getHeight() > (mScreenHeight * 2 / 3)) {
+                            mSlideDamping = 3f;
+                        } else {
+                            mSlideDamping = 2f;
+                        }
                         mSlideBrightness = true;
                         float diff = (e1.getY() - e2.getY()) * mSlideDamping / getHeight() + mPreSlideBrightness;
                         if (diff < 0) {
@@ -816,9 +831,6 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                         Message message = mMainHandler.obtainMessage(UPDATE_BRIGHTNESS_DIALOG, diff);
                         mMainHandler.sendMessage(message);
 
-                        if (getParent() instanceof ViewGroup) {
-                            ViewGroup.class.cast(getParent()).requestDisallowInterceptTouchEvent(true);
-                        }
 
                         return true;
                     }
@@ -1050,9 +1062,6 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         mBottomProgressbar.setVisibility(mShowBottomProgress ? VISIBLE : GONE);
         mImgThumb = (ImageView) mediaView.findViewById(R.id.thumb);
         mImgThumb.setVisibility(mShowThumb ? VISIBLE : GONE);
-        if (mShowThumb && mThumbDrawable != null) {
-            mImgThumb.setImageDrawable(mThumbDrawable);
-        }
 
         mBtnFullscreen.setOnClickListener(mFullScreenListener);
 
@@ -1158,7 +1167,6 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
         fullscreen();
 
-
         IjkVideoManager.getInstance().clearVideoView();
         IjkVideoManager.getInstance().clearStateChangeListener();
 
@@ -1229,24 +1237,23 @@ public class MediaController extends FrameLayout implements IMediaController, Or
                     | SYSTEM_UI_FLAG_FULLSCREEN
                     | SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
             mContext.getWindow().getDecorView().setSystemUiVisibility(systemUiVisibility);
-        } else {
-            int flag = mContext.getWindow().getAttributes().flags;
-            mOriginalFullScreen = (flag & WindowManager.LayoutParams.FLAG_FULLSCREEN) > 0;
-            if (!mOriginalFullScreen) {
-                mContext.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN
-                        , WindowManager.LayoutParams.FLAG_FULLSCREEN);
-            }
-            if (mContext instanceof AppCompatActivity) {
-                ActionBar actionBar = ((AppCompatActivity) mContext).getSupportActionBar();
-                if (actionBar != null && actionBar.isShowing()) {
-                    mOriginalActionBar = true;
-                    actionBar.setShowHideAnimationEnabled(false);
-                    actionBar.hide();
-                }
-            } else if (mContext.getActionBar() != null && mContext.getActionBar().isShowing()) {
+        }
+        int flag = mContext.getWindow().getAttributes().flags;
+        mOriginalFullScreen = (flag & WindowManager.LayoutParams.FLAG_FULLSCREEN) > 0;
+        if (!mOriginalFullScreen) {
+            mContext.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN
+                    , WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        }
+        if (mContext instanceof AppCompatActivity) {
+            ActionBar actionBar = ((AppCompatActivity) mContext).getSupportActionBar();
+            if (actionBar != null && actionBar.isShowing()) {
                 mOriginalActionBar = true;
-                mContext.getActionBar().hide();
+                actionBar.setShowHideAnimationEnabled(false);
+                actionBar.hide();
             }
+        } else if (mContext.getActionBar() != null && mContext.getActionBar().isShowing()) {
+            mOriginalActionBar = true;
+            mContext.getActionBar().hide();
         }
     }
 
@@ -1280,17 +1287,16 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private void exitFullscreen() {
         if (mSystemUiVisibility != -1) {
             mContext.getWindow().getDecorView().setSystemUiVisibility(mSystemUiVisibility);
-        } else {
-            if (!mOriginalFullScreen) {
-                mContext.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-            }
-            if (mOriginalActionBar) {
-                mOriginalActionBar = false;
-                if (mContext.getActionBar() != null) {
-                    mContext.getActionBar().show();
-                } else if (mContext instanceof AppCompatActivity && ((AppCompatActivity) mContext).getSupportActionBar() != null) {
-                    ((AppCompatActivity) mContext).getSupportActionBar().show();
-                }
+        }
+        if (!mOriginalFullScreen) {
+            mContext.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        }
+        if (mOriginalActionBar) {
+            mOriginalActionBar = false;
+            if (mContext.getActionBar() != null) {
+                mContext.getActionBar().show();
+            } else if (mContext instanceof AppCompatActivity && ((AppCompatActivity) mContext).getSupportActionBar() != null) {
+                ((AppCompatActivity) mContext).getSupportActionBar().show();
             }
         }
     }
@@ -1301,7 +1307,6 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         if (mImgThumb != null) {
             boolean needShow = !isActive() && mShowThumb;
             mImgThumb.setVisibility(needShow ? VISIBLE : GONE);
-            mImgThumb.setImageDrawable(mThumbDrawable);
 
         }
     }

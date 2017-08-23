@@ -1,7 +1,6 @@
 package com.leo.ijkplayer;
 
 import android.content.Intent;
-import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
@@ -15,8 +14,6 @@ import android.widget.Button;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.request.RequestOptions;
-import com.bumptech.glide.request.target.SimpleTarget;
-import com.bumptech.glide.request.transition.Transition;
 import com.leo.player.media.IjkVideoManager;
 import com.leo.player.media.controller.MediaController;
 import com.leo.player.media.util.NetworkUtils;
@@ -154,6 +151,12 @@ public class ListActivity extends AppCompatActivity {
             View contentView = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_video, parent, false);
             ViewHolder viewHolder = new ViewHolder(contentView);
             viewHolder.controller = new MediaController(parent.getContext());
+            viewHolder.controller.setEnableSlideBrightness(false);
+            viewHolder.controller.setEnableSliderVolume(false);
+            viewHolder.controller.setEnableSlidePosition(false);
+//            viewHolder.controller.setFullScreenViewEnableSlideBrightness(false);
+//            viewHolder.controller.setFullScreenViewEnableSlidePosition(false);
+//            viewHolder.controller.setFullScreenViewEnableSliderVolume(false);
             viewHolder.controller.setFullScreenMode(MediaController.FULLSCREEN_VIEW);
             viewHolder.controller.setMute(true);
             viewHolder.controller.setShowBottomLayout(false);
@@ -174,18 +177,15 @@ public class ListActivity extends AppCompatActivity {
                     holder.controller.toggleFullScreenView();
                 }
             });
-            Glide
-                    .with(holder.itemView.getContext())
-                    .load(IMGS[position])
-                    .apply(RequestOptions.overrideOf(mVideoWidth, mVideoHeight))
-                    .apply(RequestOptions.centerCropTransform())
-                    .into(new SimpleTarget<Drawable>() {
-                        @Override
-                        public void onResourceReady(Drawable resource, Transition<? super Drawable> transition) {
-                            Log.d(getClass().getSimpleName(), "resource：" + resource + "，transition：" + transition);
-                            holder.controller.setThumbDrawable(resource);
-                        }
-                    });
+            if (holder.controller.getImgThumb() != null) {
+                Glide
+                        .with(holder.itemView.getContext())
+                        .load(IMGS[position])
+                        .apply(RequestOptions.centerCropTransform())
+                        .into(holder.controller.getImgThumb());
+            } else {
+                Log.d(getClass().getSimpleName(), "Thumb ImgView is null");
+            }
 
         }
 
