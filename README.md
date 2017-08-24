@@ -1,6 +1,6 @@
 ## 简介
 因为最近项目有视频播放的需求，所以就有了这个项目。视频的编解码功能是由 Bilibili 开源的 ijkplayer 处理的，这个项目只是基于 UI 层面的上封装。
-> **注意：**这个项目部分代码参考于 GSYVideoPlayer。
+> **注意：** 这个项目部分代码参考于 GSYVideoPlayer。
 
 ## 感谢
 * [ijkplayer](https://github.com/Bilibili/ijkplayer)
