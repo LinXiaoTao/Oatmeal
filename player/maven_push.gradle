@@ -29,13 +29,10 @@ def isReleaseBuild() {
 }
 
 afterEvaluate { project ->
-    // 我们声明我们要执行的上传到maven的task
     uploadArchives {
         repositories {
             mavenDeployer {
                 beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
-                // 我们类比下compile com.squareup.okhttp:okhttp:2.7.0
-                // 这样就类似坐标的方式定位到了制定的库文件
                 pom.artifactId = POM_ARTIFACT_ID
                 pom.groupId = POM_GROUP_ID
                 pom.version = VERSION_NAME
