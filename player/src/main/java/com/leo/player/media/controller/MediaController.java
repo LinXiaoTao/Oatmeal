@@ -53,7 +53,6 @@ import com.leo.player.media.weiget.ENPlayView;
 import java.util.Formatter;
 import java.util.Locale;
 
-import static com.leo.player.R.id.fullscreen;
 import static com.leo.player.R.id.total;
 
 
@@ -62,11 +61,9 @@ import static com.leo.player.R.id.total;
  * Created on 2017/8/10 上午10:46.
  * leo linxiaotao1993@vip.qq.com
  */
-
 public class MediaController extends FrameLayout implements IMediaController, OrientationUtils.Callback {
 
     private static final String TAG = "MediaController";
-    private static final String TRANSITION_NAME_IJKVIEW = "transition_name_ijkview";
 
 
     ///////////////////////////////////////////////////////////////////////////
@@ -1066,8 +1063,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         mLayoutBottom.setVisibility(mShowBottomLayout ? VISIBLE : GONE);
         mTextCurrent = (TextView) mediaView.findViewById(R.id.current);
         mSeekProgress = (SeekBar) mediaView.findViewById(R.id.progress);
-        mTextTotal = (TextView) mediaView.findViewById(R.id.total);
-        mBtnFullscreen = (ImageView) mediaView.findViewById(fullscreen);
+        mTextTotal = (TextView) mediaView.findViewById(total);
+        mBtnFullscreen = (ImageView) mediaView.findViewById(R.id.fullscreen);
         mBottomProgressbar = (ProgressBar) mediaView.findViewById(R.id.bottom_progressbar);
         mBottomProgressbar.setVisibility(mShowBottomProgress ? VISIBLE : GONE);
         mImgThumb = (ImageView) mediaView.findViewById(R.id.thumb);
@@ -1689,7 +1686,7 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
         mPositionDialogContentView = LayoutInflater.from(mContext).inflate(R.layout.dialog_video_position, null);
         mDialogProgress = (ProgressBar) mPositionDialogContentView.findViewById(R.id.progress);
-        mDialogTotal = (TextView) mPositionDialogContentView.findViewById(total);
+        mDialogTotal = (TextView) mPositionDialogContentView.findViewById(R.id.total);
         mDialogCurrent = (TextView) mPositionDialogContentView.findViewById(R.id.current);
 
         mDialogTotal.setText(String.format(Locale.CHINA, " / %s", stringForTime(IjkVideoManager.getInstance().getDuration())));
