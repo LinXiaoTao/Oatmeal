@@ -7,8 +7,6 @@ import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.Color;
-import android.graphics.Rect;
-import android.graphics.drawable.ColorDrawable;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
@@ -17,10 +15,11 @@ import android.os.Looper;
 import android.os.Message;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.transition.AutoTransition;
+import android.support.transition.Transition;
+import android.support.transition.TransitionManager;
 import android.support.v4.view.GestureDetectorCompat;
-import android.support.v7.app.ActionBar;
 import android.support.v7.app.AlertDialog;
-import android.support.v7.app.AppCompatActivity;
 import android.support.v7.app.AppCompatDialog;
 import android.util.AttributeSet;
 import android.view.GestureDetector;
@@ -41,9 +40,11 @@ import android.widget.Toast;
 
 import com.leo.player.R;
 import com.leo.player.media.IjkVideoManager;
-import com.leo.player.media.util.LoggerUtil;
+import com.leo.player.media.util.CommonUtils;
+import com.leo.player.media.util.LoggerUtils;
 import com.leo.player.media.util.NetworkUtils;
 import com.leo.player.media.util.OrientationUtils;
+import com.leo.player.media.util.SimpleTransitionListener;
 import com.leo.player.media.videoview.IVideoView;
 import com.leo.player.media.videoview.IjkVideoView;
 import com.leo.player.media.weiget.ENDownloadView;
@@ -65,6 +66,7 @@ import static com.leo.player.R.id.total;
 public class MediaController extends FrameLayout implements IMediaController, OrientationUtils.Callback {
 
     private static final String TAG = "MediaController";
+    private static final String TRANSITION_NAME_IJKVIEW = "transition_name_ijkview";
 
 
     ///////////////////////////////////////////////////////////////////////////
@@ -104,7 +106,8 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     private boolean mFullScreenViewEnableSliderVolume = true;
     /** 全屏视图模式下是否开启滑动改变播放进度 */
     private boolean mFullScreenViewEnableSlidePosition = true;
-
+    /** 是否需要添加全屏视图动画 */
+    private boolean mFullScreenViewAnim = true;
 
     ///////////////////////////////////////////////////////////////////////////
     // 常量区
@@ -226,6 +229,9 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     /** 状态栏高度 */
     private int mStatusHeight;
 
+    /** 当前 window location */
+    private int[] mLocations = new int[2];
+
     private static final String NOT_READY_INFO = "视频还没准备好呢";
 
     public MediaController(Context context) {
@@ -344,6 +350,11 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
     public MediaController setFullScreenViewEnableSlidePosition(boolean fullScreenViewEnableSlidePosition) {
         mFullScreenViewEnableSlidePosition = fullScreenViewEnableSlidePosition;
+        return this;
+    }
+
+    public MediaController setFullScreenViewAnim(boolean fullScreenViewAnim) {
+        mFullScreenViewAnim = fullScreenViewAnim;
         return this;
     }
 
@@ -674,12 +685,11 @@ public class MediaController extends FrameLayout implements IMediaController, Or
 
     private void init(Context context) {
 
+
         mContext = Activity.class.cast(context);
 
         //获取状态栏高度
-        Rect rect = new Rect();
-        mContext.getWindow().getDecorView().getWindowVisibleDisplayFrame(rect);
-        mStatusHeight = rect.top;
+        mStatusHeight = CommonUtils.getStatusHeight(mContext);
         debug("当前状态高度：" + mStatusHeight);
 
         mAudioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
@@ -1141,13 +1151,14 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         }
     };
 
+
     private void addFullScreenView() {
 
         if (!mEnabled || mCurrentUri == null) {
             return;
         }
 
-        ViewGroup viewGroup = (ViewGroup) mContext.findViewById(Window.ID_ANDROID_CONTENT);
+        final ViewGroup viewGroup = (ViewGroup) mContext.findViewById(Window.ID_ANDROID_CONTENT);
         if (viewGroup == null) {
             return;
         }
@@ -1164,11 +1175,9 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             mFullScreenView = null;
         }
 
-
-        fullscreen();
-
         IjkVideoManager.getInstance().clearVideoView();
         IjkVideoManager.getInstance().clearStateChangeListener();
+
 
         mFullScreenView = new IjkVideoView(mContext);
         final IjkVideoView ijkVideoView = (IjkVideoView) mFullScreenView;
@@ -1219,12 +1228,56 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         IjkVideoManager.getInstance().refreshRenderView();
 
 
-        ViewGroup.LayoutParams layoutParams = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        viewGroup.addView(mFullScreenView, layoutParams);
+        fullscreen();
+
+        if (mFullScreenViewAnim) {
+
+            getLocationOnScreen(mLocations);
+
+            int leftMargin = mLocations[0];
+            int topMargin = mLocations[1];
+
+            if (!mOriginalFullScreen) {
+                topMargin -= mStatusHeight;
+            }
+
+            FrameLayout frameLayout = new FrameLayout(mContext);
+            ViewGroup.LayoutParams frameLayoutParams = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT
+                    , ViewGroup.LayoutParams.MATCH_PARENT);
+            frameLayout.setBackgroundColor(Color.BLACK);
+            viewGroup.addView(frameLayout, frameLayoutParams);
+
+            MarginLayoutParams layoutParams = new MarginLayoutParams(getWidth(), getHeight());
+            layoutParams.leftMargin = leftMargin;
+            layoutParams.topMargin = topMargin;
+            frameLayout.addView(mFullScreenView, layoutParams);
+
+            mFullScreenView.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    if (mFullScreenView.getLayoutParams() instanceof MarginLayoutParams) {
+                        TransitionManager.beginDelayedTransition(viewGroup);
+
+                        MarginLayoutParams marginLayoutParams = (MarginLayoutParams) mFullScreenView.getLayoutParams();
+                        marginLayoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                        marginLayoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT;
+                        marginLayoutParams.leftMargin = 0;
+                        marginLayoutParams.topMargin = 0;
+                        mFullScreenView.setLayoutParams(marginLayoutParams);
+                    }
+                }
+            }, 300);
+
+        } else {
+            LayoutParams layoutParams = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            viewGroup.addView(mFullScreenView, layoutParams);
+        }
+
 
         mFullscreen = true;
 
     }
+
 
     private void fullscreen() {
         //全屏
@@ -1244,34 +1297,69 @@ public class MediaController extends FrameLayout implements IMediaController, Or
             mContext.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN
                     , WindowManager.LayoutParams.FLAG_FULLSCREEN);
         }
-        if (mContext instanceof AppCompatActivity) {
-            ActionBar actionBar = ((AppCompatActivity) mContext).getSupportActionBar();
-            if (actionBar != null && actionBar.isShowing()) {
-                mOriginalActionBar = true;
-                actionBar.setShowHideAnimationEnabled(false);
-                actionBar.hide();
-            }
-        } else if (mContext.getActionBar() != null && mContext.getActionBar().isShowing()) {
-            mOriginalActionBar = true;
-            mContext.getActionBar().hide();
-        }
+
+        mOriginalActionBar = CommonUtils.hideActionBar(mContext);
+
     }
 
 
     private void removeFullScreenView() {
 
-        if (!mEnabled) {
+        final ViewGroup viewGroup = (ViewGroup) mContext.findViewById(Window.ID_ANDROID_CONTENT);
+
+        if (!mEnabled || viewGroup == null) {
             return;
         }
+
+        if (mFullScreenViewAnim) {
+            int leftMargin = mLocations[0];
+            int topMargin = mLocations[1];
+
+            if (!mOriginalFullScreen) {
+                topMargin -= mStatusHeight;
+            }
+
+            SimpleTransitionListener simpleTransitionListener = new SimpleTransitionListener() {
+                @Override
+                public void onTransitionEnd(@NonNull Transition transition) {
+                    super.onTransitionEnd(transition);
+                    restoreFullScreenView();
+                    transition.removeListener(this);
+                }
+            };
+            AutoTransition autoTransition = new AutoTransition();
+            autoTransition.addListener(simpleTransitionListener);
+
+            TransitionManager.beginDelayedTransition(viewGroup, autoTransition);
+
+            MarginLayoutParams layoutParams = (MarginLayoutParams) mFullScreenView.getLayoutParams();
+            layoutParams.topMargin = topMargin;
+            layoutParams.leftMargin = leftMargin;
+            layoutParams.width = getWidth();
+            layoutParams.height = getHeight();
+            mFullScreenView.setLayoutParams(layoutParams);
+
+        } else {
+            restoreFullScreenView();
+        }
+
+    }
+
+    private void restoreFullScreenView() {
+
+        //恢复界面
+        exitFullscreen();
 
         if (mFullScreenView != null) {
             ViewGroup viewGroup = (ViewGroup) mFullScreenView.getParent();
             viewGroup.removeView(mFullScreenView);
             mFullScreenView = null;
-        }
 
-        //恢复界面
-        exitFullscreen();
+            if (mFullScreenViewAnim) {
+                ((ViewGroup) viewGroup.getParent()).removeView(viewGroup);
+            }
+
+        }
 
 
         if (mVideoView != null) {
@@ -1293,12 +1381,10 @@ public class MediaController extends FrameLayout implements IMediaController, Or
         }
         if (mOriginalActionBar) {
             mOriginalActionBar = false;
-            if (mContext.getActionBar() != null) {
-                mContext.getActionBar().show();
-            } else if (mContext instanceof AppCompatActivity && ((AppCompatActivity) mContext).getSupportActionBar() != null) {
-                ((AppCompatActivity) mContext).getSupportActionBar().show();
-            }
+            CommonUtils.showActionBar(mContext);
         }
+
+
     }
 
 
@@ -1651,11 +1737,11 @@ public class MediaController extends FrameLayout implements IMediaController, Or
     }
 
     private void debug(@NonNull String info) {
-        LoggerUtil.debugLog(TAG, info);
+        LoggerUtils.debugLog(TAG, info);
     }
 
     private void error(@NonNull String info) {
-        LoggerUtil.errorLog(TAG, info);
+        LoggerUtils.errorLog(TAG, info);
     }
 
 }

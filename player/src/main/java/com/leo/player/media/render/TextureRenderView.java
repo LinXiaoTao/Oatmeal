@@ -31,7 +31,7 @@ import android.view.View;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
-import com.leo.player.media.util.LoggerUtil;
+import com.leo.player.media.util.LoggerUtils;
 import com.leo.player.media.util.MeasureHelper;
 
 import java.lang.ref.WeakReference;
@@ -301,7 +301,7 @@ public class TextureRenderView extends TextureView implements IRenderView {
                 renderCallback.onSurfaceDestroyed(surfaceHolder);
             }
 
-            LoggerUtil.debugLog(TAG, "onSurfaceTextureDestroyed: destroy: " + mOwnSurfaceTexture);
+            LoggerUtils.debugLog(TAG, "onSurfaceTextureDestroyed: destroy: " + mOwnSurfaceTexture);
             return mOwnSurfaceTexture;
         }
 
@@ -317,47 +317,47 @@ public class TextureRenderView extends TextureView implements IRenderView {
         @Override
         public void releaseSurfaceTexture(SurfaceTexture surfaceTexture) {
             if (surfaceTexture == null) {
-                LoggerUtil.debugLog(TAG, "releaseSurfaceTexture: null");
+                LoggerUtils.debugLog(TAG, "releaseSurfaceTexture: null");
             } else if (mDidDetachFromWindow) {
                 if (surfaceTexture != mSurfaceTexture) {
-                    LoggerUtil.debugLog(TAG, "releaseSurfaceTexture: didDetachFromWindow(): release different SurfaceTexture");
+                    LoggerUtils.debugLog(TAG, "releaseSurfaceTexture: didDetachFromWindow(): release different SurfaceTexture");
                     surfaceTexture.release();
                 } else if (!mOwnSurfaceTexture) {
-                    LoggerUtil.debugLog(TAG, "releaseSurfaceTexture: didDetachFromWindow(): release detached SurfaceTexture");
+                    LoggerUtils.debugLog(TAG, "releaseSurfaceTexture: didDetachFromWindow(): release detached SurfaceTexture");
                     surfaceTexture.release();
                 } else {
-                    LoggerUtil.debugLog(TAG, "releaseSurfaceTexture: didDetachFromWindow(): already released by TextureView");
+                    LoggerUtils.debugLog(TAG, "releaseSurfaceTexture: didDetachFromWindow(): already released by TextureView");
                 }
             } else if (mWillDetachFromWindow) {
                 if (surfaceTexture != mSurfaceTexture) {
-                    LoggerUtil.debugLog(TAG, "releaseSurfaceTexture: willDetachFromWindow(): release different SurfaceTexture");
+                    LoggerUtils.debugLog(TAG, "releaseSurfaceTexture: willDetachFromWindow(): release different SurfaceTexture");
                     surfaceTexture.release();
                 } else if (!mOwnSurfaceTexture) {
-                    LoggerUtil.debugLog(TAG, "releaseSurfaceTexture: willDetachFromWindow(): re-attach SurfaceTexture to TextureView");
+                    LoggerUtils.debugLog(TAG, "releaseSurfaceTexture: willDetachFromWindow(): re-attach SurfaceTexture to TextureView");
                     setOwnSurfaceTexture(true);
                 } else {
-                    LoggerUtil.debugLog(TAG, "releaseSurfaceTexture: willDetachFromWindow(): will released by TextureView");
+                    LoggerUtils.debugLog(TAG, "releaseSurfaceTexture: willDetachFromWindow(): will released by TextureView");
                 }
             } else {
                 if (surfaceTexture != mSurfaceTexture) {
-                    LoggerUtil.debugLog(TAG, "releaseSurfaceTexture: alive: release different SurfaceTexture");
+                    LoggerUtils.debugLog(TAG, "releaseSurfaceTexture: alive: release different SurfaceTexture");
                     surfaceTexture.release();
                 } else if (!mOwnSurfaceTexture) {
-                    LoggerUtil.debugLog(TAG, "releaseSurfaceTexture: alive: re-attach SurfaceTexture to TextureView");
+                    LoggerUtils.debugLog(TAG, "releaseSurfaceTexture: alive: re-attach SurfaceTexture to TextureView");
                     setOwnSurfaceTexture(true);
                 } else {
-                    LoggerUtil.debugLog(TAG, "releaseSurfaceTexture: alive: will released by TextureView");
+                    LoggerUtils.debugLog(TAG, "releaseSurfaceTexture: alive: will released by TextureView");
                 }
             }
         }
 
         public void willDetachFromWindow() {
-            LoggerUtil.debugLog(TAG, "willDetachFromWindow()");
+            LoggerUtils.debugLog(TAG, "willDetachFromWindow()");
             mWillDetachFromWindow = true;
         }
 
         public void didDetachFromWindow() {
-            LoggerUtil.debugLog(TAG, "didDetachFromWindow()");
+            LoggerUtils.debugLog(TAG, "didDetachFromWindow()");
             mDidDetachFromWindow = true;
         }
     }

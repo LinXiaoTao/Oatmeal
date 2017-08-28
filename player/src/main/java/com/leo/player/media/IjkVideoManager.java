@@ -17,7 +17,7 @@ import com.danikula.videocache.CacheListener;
 import com.danikula.videocache.HttpProxyCacheServer;
 import com.leo.player.media.datasource.FileMediaDataSource;
 import com.leo.player.media.render.IRenderView;
-import com.leo.player.media.util.LoggerUtil;
+import com.leo.player.media.util.LoggerUtils;
 import com.leo.player.media.util.StorageUtils;
 import com.leo.player.media.videoview.IVideoView;
 
@@ -140,7 +140,7 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     }
 
     public static void setLog(boolean log) {
-        LoggerUtil.setLog(log);
+        LoggerUtils.setLog(log);
     }
 
 
@@ -811,11 +811,11 @@ public final class IjkVideoManager implements IMediaPlayer.OnPreparedListener, I
     ///////////////////////////////////////////////////////////////////////////
 
     private void debugLog(String message) {
-        LoggerUtil.debugLog(TAG, message);
+        LoggerUtils.debugLog(TAG, message);
     }
 
     private void errorLog(String message) {
-        LoggerUtil.errorLog(TAG, message);
+        LoggerUtils.errorLog(TAG, message);
     }
 
 

@@ -8,11 +8,11 @@ import android.util.Log;
  * leo linxiaotao1993@vip.qq.com
  */
 
-public final class LoggerUtil {
+public final class LoggerUtils {
 
     private static final String TAG = "Player";
 
-    private static boolean sLog;
+    private static boolean sLog = true;
 
     public static boolean isLog() {
         return sLog;
